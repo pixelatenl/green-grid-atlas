@@ -1,0 +1,313 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  Pixelate family theme, built on the shadcn/ui default token set.
+  The neutral white surfaces of the shadcn default theme are replaced by
+  the Pixelate green (#48B9D1) in two shades: a light tint for the light
+  theme, the dark pixelate.nl teal (#0F353D) for the dark theme.
+  NOTE: these brand values are provisional until the exact brand colors
+  are confirmed; they are isolated in this file for a one-place swap.
+
+  This sheet is the shared family token layer owned by the
+  open-data-family registry. It ends at the chart utilities below;
+  product-specific tokens (a product's own palette or figure
+  treatments) belong in the product's stylesheet and must not return
+  here.
+*/
+
+:root {
+  --radius: 0.625rem;
+
+  /*
+    Brand accent orange, a family theme token shipped by the
+    open-data-family registry. The light theme uses the darkened
+    variant #A64B0C, because the brand orange #F48822 reaches only
+    2.27 to 1 on the light background; the darkened variant reaches
+    5.24 to 1 on light, and the brand orange itself reaches 5.25 to 1
+    on the dark background. Both values keep normal text at WCAG AA,
+    4.5 to 1, in their theme.
+  */
+  --brand-accent: #A64B0C;
+
+  /* Light theme: light Pixelate green tint */
+  --background: #eaf6f9;
+  --foreground: #051214;
+  --card: #f6fbfc;
+  --card-foreground: #051214;
+  --popover: #f6fbfc;
+  --popover-foreground: #051214;
+  --primary: #48b9d1;
+  --primary-foreground: #051214;
+  --secondary: #d3ecf1;
+  --secondary-foreground: #0f353d;
+  --muted: #dceef2;
+  --muted-foreground: #47626a;
+  --accent: #c4e5ec;
+  --accent-foreground: #051214;
+  --border: #c8dee4;
+  --input: #c8dee4;
+  --ring: #48b9d1;
+
+  --chart-1: #48b9d1;
+  --chart-2: #2b8ba3;
+  --chart-3: #166474;
+  --chart-4: #0f353d;
+  --chart-5: #86d6e5;
+
+  /*
+    Bar track for horizontal value charts: the surface a value bar
+    fills. --muted is too close to the card in both themes (1.15 to 1
+    in light, 1.01 to 1 in dark) for the track to read, so this stays
+    in the theme's teal family but far enough from the card to stay
+    visible: 1.6 to 1 against the light card, 1.7 to 1 against the
+    dark card, while the value bars on top still reach about 4 to 1
+    against it.
+  */
+  --chart-track: #a9ced9;
+
+  /*
+    Splash gradients, the family cover. --splash-base is the
+    launcher hub's own splash token (opendata.pixelate.nl); the
+    light value is shared verbatim with the page cover below, and
+    the dark value keeps the launcher's full three-stop ramp and
+    direction. --body-splash paints the product page's background in
+    the same stops per theme, so the launcher hub and every product
+    share one canvas. The page cover is viewport-anchored
+    (background-attachment: fixed, applied in the base layer below)
+    so it reads like the launcher's hero splash behind the whole
+    document; on browsers that ignore fixed backgrounds the gradient
+    falls back to spanning the page, above the flat --background
+    color kept beneath it.
+  */
+  --splash-base: linear-gradient(180deg, #eaf6f9 0%, #d7ebf1 100%);
+  --body-splash: linear-gradient(180deg, #eaf6f9 0%, #d7ebf1 100%);
+}
+
+.dark {
+  /* Dark theme canvas: the lighter brand teal, kept over the terminal
+     tone #051214. Every page-background contrast pair still clears
+     its bar: foreground 11.9 to 1, muted foreground 6.8 to 1, the
+     orange brand accent 5.25 to 1, the card surface at 1.2 to 1. */
+  --background: #0f353d;
+  --foreground: #e9f6f9;
+  --card: #14414c;
+  --card-foreground: #e9f6f9;
+  --popover: #14414c;
+  --popover-foreground: #e9f6f9;
+  --primary: #48b9d1;
+  --primary-foreground: #051214;
+  --secondary: #1b4e5a;
+  --secondary-foreground: #d2ecf1;
+  --muted: #174049;
+  --muted-foreground: #9ac0cb;
+  --accent: #1f5766;
+  --accent-foreground: #e9f6f9;
+  --border: #225662;
+  --input: #225662;
+  --ring: #48b9d1;
+
+  /* Brand accent orange at full brand value, 5.25 to 1 on the dark
+     background; see the :root block for the contrast rationale. */
+  --brand-accent: #F48822;
+
+  --chart-1: #48b9d1;
+  --chart-2: #6fd0e2;
+  --chart-3: #a7e2ee;
+  --chart-4: #86d6e5;
+  --chart-5: #d2ecf1;
+
+  /* Bar track, light enough to read on the dark card; see :root. */
+  --chart-track: #2a6572;
+
+  /*
+    Dark splash canvas: the launcher's dark-first brand gradient, its
+    exact three stops (#48B9D1 over #0F353D into #051214).
+    --splash-base keeps the launcher's own 165deg direction; the
+    page cover (--body-splash) mirrors the ramp to run
+    bottom-right-up-left (345deg) so the terminal tone #051214 owns
+    the text-bearing top half of the viewport while the bright teal
+    gathers as an accent in the bottom-right corner — the same
+    reason the launcher seats its own headline over the splash's
+    dark zones. Solid-background blocks (like the family footer)
+    guard any text near that corner. The light theme's
+    near-identical top-light tints keep the original direction.
+  */
+  --splash-base: linear-gradient(165deg, #48b9d1 0%, #0f353d 52%, #051214 100%);
+  --body-splash: linear-gradient(345deg, #48b9d1 0%, #0f353d 48%, #051214 100%);
+}
+
+/*
+  Chart fills and focus affordances. The gradient base stops derive from
+  the chart tokens in this file only, so the bars darken subtly toward
+  their base and both themes apply without any JavaScript theme checks.
+*/
+:root {
+  --chart-1-base: color-mix(in oklab, var(--chart-1) 85%, #000);
+  --chart-2-base: color-mix(in oklab, var(--chart-2) 85%, #000);
+  --chart-3-base: color-mix(in oklab, var(--chart-3) 85%, #000);
+  --chart-4-base: color-mix(in oklab, var(--chart-4) 85%, #000);
+  --chart-5-base: color-mix(in oklab, var(--chart-5) 85%, #000);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand-accent: var(--brand-accent);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image: var(--body-splash);
+    background-attachment: fixed;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  /* Vertical chart gradients: the token color at the top, subtly darker
+     at the base. Referencing the custom properties keeps both themes and
+     live theme toggles working with no JavaScript involvement. */
+  .chart-gradient-1 {
+    background-image: linear-gradient(to bottom, var(--chart-1), var(--chart-1-base));
+  }
+  .chart-gradient-2 {
+    background-image: linear-gradient(to bottom, var(--chart-2), var(--chart-2-base));
+  }
+  .chart-gradient-3 {
+    background-image: linear-gradient(to bottom, var(--chart-3), var(--chart-3-base));
+  }
+  .chart-gradient-4 {
+    background-image: linear-gradient(to bottom, var(--chart-4), var(--chart-4-base));
+  }
+  .chart-gradient-5 {
+    background-image: linear-gradient(to bottom, var(--chart-5), var(--chart-5-base));
+  }
+
+  /* Focus rings for chart bars and segments. SVG shapes render CSS
+     outlines unreliably, so SVG triggers use a stroke ring instead. */
+  .chart-tooltip-trigger:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  svg .chart-tooltip-trigger:focus-visible {
+    outline: none;
+    stroke: var(--ring);
+    stroke-width: 1.5;
+  }
+}
+
+/*
+  Green Grid Atlas product tokens, product-owned (this appended product
+  section, never the family sheet above). The dark theme background is
+  the family dark canvas #0F353D, inherited unchanged from the family
+  layer; every token below derives from family tokens or the brand pair
+  so both themes apply without JavaScript theme checks.
+*/
+
+:root {
+  /*
+    Heatmap layer scales. Each layer is a sequential ramp from its calm
+    stop to its saturated stop; the price layer is diverging through the
+    card surface so cheap (brand green) and expensive (brand accent)
+    read in opposite directions around the mid stop.
+  */
+  --gg-price-calm: #c4e5ec;
+  --gg-price-mid: #f6fbfc;
+  --gg-price-hot: #a64b0c;
+  --gg-renewable-low: #dceef2;
+  --gg-renewable-high: #166474;
+  --gg-intensity-low: #dceef2;
+  --gg-intensity-high: #a64b0c;
+  --gg-gap: transparent;
+
+  /* Green window / red hours markers on the heatmap. */
+  --gg-green-band: #2b8ba3;
+  --gg-green-band-soft: color-mix(in oklab, #2b8ba3 22%, transparent);
+  --gg-red-band: #a64b0c;
+  --gg-red-band-soft: color-mix(in oklab, #a64b0c 22%, transparent);
+
+  /* Cross-border flows: imports positive, exports negative (disclosed). */
+  --gg-flow-import: #48b9d1;
+  --gg-flow-export: #a64b0c;
+
+  /* Weather overlay strokes. */
+  --gg-weather-wind: #2b8ba3;
+  --gg-weather-solar: #a64b0c;
+  --gg-weather-temp: #166474;
+
+  /* Risk indicator chips. */
+  --gg-risk-calm: #2b8ba3;
+  --gg-risk-watch: #a64b0c;
+  --gg-risk-high: #f48822;
+}
+
+.dark {
+  --gg-price-calm: #1f5766;
+  --gg-price-mid: #14414c;
+  --gg-price-hot: #f48822;
+  --gg-renewable-low: #174049;
+  --gg-renewable-high: #a7e2ee;
+  --gg-intensity-low: #174049;
+  --gg-intensity-high: #f48822;
+
+  --gg-green-band: #6fd0e2;
+  --gg-green-band-soft: color-mix(in oklab, #6fd0e2 22%, transparent);
+  --gg-red-band: #f48822;
+  --gg-red-band-soft: color-mix(in oklab, #f48822 22%, transparent);
+
+  --gg-flow-import: #48b9d1;
+  --gg-flow-export: #f48822;
+
+  --gg-weather-wind: #6fd0e2;
+  --gg-weather-solar: #f48822;
+  --gg-weather-temp: #a7e2ee;
+
+  --gg-risk-calm: #6fd0e2;
+  --gg-risk-watch: #f48822;
+  --gg-risk-high: #f48822;
+}
+
+@theme inline {
+  --color-gg-price-calm: var(--gg-price-calm);
+  --color-gg-price-mid: var(--gg-price-mid);
+  --color-gg-price-hot: var(--gg-price-hot);
+  --color-gg-renewable-low: var(--gg-renewable-low);
+  --color-gg-renewable-high: var(--gg-renewable-high);
+  --color-gg-intensity-low: var(--gg-intensity-low);
+  --color-gg-intensity-high: var(--gg-intensity-high);
+  --color-gg-green-band: var(--gg-green-band);
+  --color-gg-red-band: var(--gg-red-band);
+  --color-gg-flow-import: var(--gg-flow-import);
+  --color-gg-flow-export: var(--gg-flow-export);
+  --color-gg-weather-wind: var(--gg-weather-wind);
+  --color-gg-weather-solar: var(--gg-weather-solar);
+  --color-gg-weather-temp: var(--gg-weather-temp);
+  --color-gg-risk-calm: var(--gg-risk-calm);
+  --color-gg-risk-watch: var(--gg-risk-watch);
+  --color-gg-risk-high: var(--gg-risk-high);
+}
