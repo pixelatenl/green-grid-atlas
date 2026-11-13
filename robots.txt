@@ -1,0 +1,5 @@
+User-Agent: *
+Allow: /
+Disallow: /widget
+
+Sitemap: https://grid-atlas.pixelate.nl/sitemap.xml

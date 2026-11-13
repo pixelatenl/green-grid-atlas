@@ -1,0 +1,5 @@
+:HL["/_next/static/chunks/3u3tgwtqjxlr9.css","style"]
+:HX"/theme-init.js"
+2:[["children",{"s":"__PAGE__","h":160}]]
+1:[["children",{"s":"widget","h":96,"c":"$Q2"}]]
+0:{"b":"ogVo24Qe2-QR7rm2WR2h3","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
