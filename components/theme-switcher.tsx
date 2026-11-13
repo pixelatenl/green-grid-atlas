@@ -22,6 +22,9 @@ export function ThemeSwitcher() {
   useEffect(() => {
     const stored = (localStorage.getItem(themeStorageKey) ?? "system") as ThemeChoice;
     setChoice(stored);
+    // Re-apply in case the pre-paint bootstrap did not stick (e.g. a dev
+    // client re-render replaced the SSR <html> and dropped the class).
+    apply(resolveDark(stored));
   }, []);
 
   useEffect(() => {

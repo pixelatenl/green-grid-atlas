@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { preinit } from "react-dom";
 import "./globals.css";
 import { FAMILY } from "@/family";
-import { themeInitScript } from "@/theme";
+import { themeInitScriptSrc } from "@/theme";
 
 /*
   Root layout: the theme bootstrap (no flash of the wrong theme) and the
@@ -27,18 +28,18 @@ export const viewport: Viewport = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  /*
+    Theme bootstrap: React Float hoists this into the initial HTML <head> as
+    a <script src>, so it runs before first paint (no flash of the wrong
+    theme) without rendering a <script> element in the React tree — such an
+    element is never executed when React client-renders, which is what the
+    dev console warning was about. The switcher also re-applies the stored
+    theme on mount as a backstop.
+  */
+  preinit(themeInitScriptSrc, { as: "script" });
+
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        {/*
-          Inline theme bootstrap as a raw <script>: emitted into the initial
-          HTML head as an executable tag, so it runs before first paint and
-          there is no flash of the wrong theme. (next/script's
-          beforeInteractive strategy is only inlined into the HTML by the
-          pages router; in the app router it never becomes executable.)
-        */}
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
       </body>

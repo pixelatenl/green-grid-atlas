@@ -18,13 +18,15 @@ function argExtreme(key: string, mode: "max" | "min"): { hour: number; value: nu
   const arr = profiles[key] ?? [];
   let best = mode === "max" ? -Infinity : Infinity;
   let bh = 0;
+  let found = false;
   arr.forEach((v, i) => {
-    if (v != null && (mode === "max" ? v > best : v < best)) {
+    if (typeof v === "number" && Number.isFinite(v) && (mode === "max" ? v > best : v < best)) {
       best = v;
       bh = i;
+      found = true;
     }
   });
-  return { hour: bh, value: arr.length ? best : null };
+  return { hour: bh, value: found ? best : null };
 }
 
 const at = (key: string, hour: number) => profiles[key]?.[hour] ?? null;
@@ -51,15 +53,17 @@ function DayProfile({
   const W = 720;
   const H = 160;
   const PAD = 8;
-  const vals = series.filter((v): v is number => v != null);
-  const max = vals.length ? Math.max(...vals) : 1;
-  const ovals = (overlay ?? []).filter((v): v is number => v != null);
-  const omax = ovals.length ? Math.max(...ovals) : 1;
+  const vals = series.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const peak = vals.length ? Math.max(...vals) : null;
+  // Guard the divisor: an all-zero series would make v/max NaN.
+  const max = peak != null && peak > 0 ? peak : 1;
+  const ovals = (overlay ?? []).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const opeak = ovals.length ? Math.max(...ovals) : null;
+  const omax = opeak != null && opeak > 0 ? opeak : 1;
   const bw = (W - PAD * 2) / 24;
-  const summary = `${seriesLabel} by hour of an average day over the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days. Peak ${formatNumber(
-    max,
-    0,
-  )} ${seriesUnit}${overlay && overlayLabel ? `; ${overlayLabel} peaks at ${formatNumber(omax, 1)} ${overlayUnit}` : ""}.`;
+  const summary = `${seriesLabel} by hour of an average day over the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days. Peak ${
+    peak != null ? `${formatNumber(peak, 0)} ${seriesUnit}` : "no data"
+  }${overlay && overlayLabel && opeak != null ? `; ${overlayLabel} peaks at ${formatNumber(opeak, 1)} ${overlayUnit}` : ""}.`;
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
@@ -68,7 +72,11 @@ function DayProfile({
       aria-label={summary}
     >
       {series.map((v, h) => {
-        const height = v != null ? (v / max) * (H - PAD * 2 - 14) : 0;
+        const valid = typeof v === "number" && Number.isFinite(v);
+        const height = valid ? (v / max) * (H - PAD * 2 - 14) : 0;
+        // <title> renders only a single string child; array children SSR
+        // empty and come back full on the client, breaking hydration.
+        const label = `${hh(h)} — ${seriesLabel}: ${valid ? `${formatNumber(v, 0)} ${seriesUnit}` : "no data"}`;
         return (
           <rect
             key={h}
@@ -78,11 +86,9 @@ function DayProfile({
             y={H - PAD - height}
             width={Math.max(1, bw - 2)}
             height={Math.max(0, height)}
-            aria-label={`${hh(h)}, ${seriesLabel} ${v != null ? `${formatNumber(v, 0)} ${seriesUnit}` : "no data"}`}
+            aria-label={`${hh(h)}, ${seriesLabel} ${valid ? `${formatNumber(v, 0)} ${seriesUnit}` : "no data"}`}
           >
-            <title>
-              {hh(h)} — {seriesLabel}: {v != null ? `${formatNumber(v, 0)} ${seriesUnit}` : "no data"}
-            </title>
+            <title>{label}</title>
           </rect>
         );
       })}
@@ -93,7 +99,7 @@ function DayProfile({
           strokeWidth="2"
           points={overlay
             .map((v, h) => {
-              if (v == null) return null;
+              if (typeof v !== "number" || !Number.isFinite(v)) return null;
               const x = PAD + h * bw + bw / 2;
               const y = H - PAD - (v / omax) * (H - PAD * 2 - 14);
               return `${x},${y}`;

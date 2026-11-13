@@ -82,10 +82,8 @@ export default function WidgetPage() {
                   style={{ height: `${Math.max(2, h)}%` }}
                   aria-label={`Quarter hour ${i}: ${v != null ? `${v.toFixed(2)} EUR/MWh` : "no data"}`}
                 >
-                  <title>
-                    {String(Math.floor(i / 4)).padStart(2, "0")}:{String((i % 4) * 15).padStart(2, "0")} —{" "}
-                    {v != null ? `${v.toFixed(2)} EUR/MWh` : "no data"}
-                  </title>
+                  {/* single string child: array children SSR empty and break hydration */}
+                  <title>{`${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")} — ${v != null ? `${v.toFixed(2)} EUR/MWh` : "no data"}`}</title>
                 </div>
               );
             })}

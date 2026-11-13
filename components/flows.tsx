@@ -33,7 +33,7 @@ function FlowTimeline({ neighbor }: { neighbor: string }) {
   const dates = days.map((d) => d.date);
   const series = days.map((d) => d.flows[neighbor] ?? []);
   const points = dailyMeans(series, dates);
-  const vals = points.map((p) => p.value).filter((v): v is number => v != null);
+  const vals = points.map((p) => p.value).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
   const max = vals.length ? Math.max(...vals) : 1;
   const min = vals.length ? Math.min(...vals) : -1;
   const W = 720;
@@ -61,10 +61,8 @@ function FlowTimeline({ neighbor }: { neighbor: string }) {
     >
       <line x1={PAD} x2={W - PAD} y1={zeroY} y2={zeroY} stroke="var(--border)" strokeDasharray="3 3" />
       <path d={path} fill="none" stroke="var(--gg-flow-import)" strokeWidth="1.5" tabIndex={0} aria-label={`${label} flow timeline, trailing 12 months, daily means in GW`}>
-        <title>
-          {label}: daily mean flow, trailing 12 months. Range {formatNumber(min, 1)} to {formatNumber(max, 1)} GW
-          (imports positive, exports negative), mean {formatNumber(mean, 1)} GW.
-        </title>
+        {/* single string child: array children SSR empty and break hydration */}
+        <title>{`${label}: daily mean flow, trailing 12 months. Range ${formatNumber(min, 1)} to ${formatNumber(max, 1)} GW (imports positive, exports negative), mean ${formatNumber(mean, 1)} GW.`}</title>
       </path>
       <text x={PAD} y={12} className="fill-muted-foreground" fontSize="9">
         {label} — daily mean GW ({formatNumber(min, 0)} … {formatNumber(max, 0)})
@@ -77,8 +75,9 @@ function VolumeBars({ neighbor }: { neighbor: string }) {
   const years = snapshot.flowVolumes.years;
   const label = NEIGHBOR_LABELS[neighbor] ?? neighbor;
   const nets = years.map((y) => y.neighbors[neighbor]?.netTWh ?? null);
-  const vals = nets.filter((v): v is number => v != null);
-  const max = vals.length ? Math.max(...vals.map((v) => Math.abs(v))) : 1;
+  const vals = nets.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  // Guard the divisor: an all-zero neighbor (e.g. Denmark) would make v/max NaN.
+  const max = vals.length ? Math.max(...vals.map((v) => Math.abs(v))) : 0;
   const W = 720;
   const H = 110;
   const PAD = 8;
@@ -94,8 +93,8 @@ function VolumeBars({ neighbor }: { neighbor: string }) {
       <line x1={PAD} x2={W - PAD} y1={zeroY} y2={zeroY} stroke="var(--border)" />
       {years.map((y, i) => {
         const v = y.neighbors[neighbor]?.netTWh ?? null;
-        if (v == null) return null;
-        const h = (Math.abs(v) / max) * (H / 2 - PAD);
+        if (typeof v !== "number" || !Number.isFinite(v)) return null;
+        const h = max > 0 ? (Math.abs(v) / max) * (H / 2 - PAD) : 0;
         const x = PAD + i * bw + 2;
         return (
           <rect
@@ -109,10 +108,8 @@ function VolumeBars({ neighbor }: { neighbor: string }) {
             fill={v >= 0 ? "var(--gg-flow-import)" : "var(--gg-flow-export)"}
             aria-label={`${label} ${y.year}: net ${formatSigned(v, 1)} TWh (imports positive, exports negative)`}
           >
-            <title>
-              {label} {y.year}: import {formatNumber(y.neighbors[neighbor]?.importTWh, 1)} TWh, export{" "}
-              {formatNumber(y.neighbors[neighbor]?.exportTWh, 1)} TWh, net {formatSigned(v, 1)} TWh
-            </title>
+            {/* single string child: array children SSR empty and break hydration */}
+            <title>{`${label} ${y.year}: import ${formatNumber(y.neighbors[neighbor]?.importTWh, 1)} TWh, export ${formatNumber(y.neighbors[neighbor]?.exportTWh, 1)} TWh, net ${formatSigned(v, 1)} TWh`}</title>
           </rect>
         );
       })}

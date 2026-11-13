@@ -1,11 +1,13 @@
 /**
- * Inline theme bootstrap, injected into <head> before first paint so there
- * is no flash of the wrong theme. Strategy: class on <html>, choice
- * persisted in localStorage, defaulting to the operating system
- * preference (dark when the OS expresses no light preference, since the
- * hero is designed dark-first).
+ * Theme plumbing. The choice is persisted in localStorage under
+ * themeStorageKey; the no-flash bootstrap script itself lives in
+ * public/theme-init.js (see themeInitScriptSrc) and is hoisted into the
+ * initial HTML <head> as a blocking <script src> via ReactDOM.preinit in
+ * app/layout.tsx — a server-emitted tag, so it runs before first paint,
+ * and not a <script> element in the React tree, which React never executes
+ * when client-rendering.
  */
-export const themeInitScript = `(function(){try{var s=localStorage.getItem('odp-theme')||'system';var dark=s==='dark'||(s!=='light'&&!window.matchMedia('(prefers-color-scheme: light)').matches);var e=document.documentElement;e.classList.toggle('dark',dark);e.style.colorScheme=dark?'dark':'light';}catch(err){var e=document.documentElement;e.classList.add('dark');e.style.colorScheme='dark';}})();`;
+export const themeInitScriptSrc = "/theme-init.js";
 
 export type ThemeChoice = "system" | "light" | "dark";
 
