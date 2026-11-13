@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { FAMILY } from "@/family";
 import { themeInitScript } from "@/theme";
@@ -30,7 +31,16 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/*
+          beforeInteractive inline script: injected into the initial HTML
+          head by Next (not rendered by React on the client, so no script
+          warning), still before first paint so there is no theme flash.
+        */}
+        <Script
+          id="odp-theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: themeInitScript }}
+        />
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
