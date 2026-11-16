@@ -169,14 +169,17 @@ other zone keeps its energy-charts feed.
   `securityToken` query parameter, read from the `ENTSOE_API_TOKEN` environment variable (Actions
   repository secret; never logged, never cached to disk, never committed — the disk-cache keys in
   `scripts/lib-entsoe.mjs` are built from the document parameters only).
-- Generation per production type: `documentType=A69`, `processType=A01`, `in_Domain=10YNL----------L`
-  (NL bidding zone EIC). One `timeSeries` per `psrType`; `Period` carries `timeInterval` (start/end, UTC)
-  and `resolution` (PT60M/PT15M); `Point` carries 1-based `position` and `quantity` in MW. Actual total
-  load: `documentType=A65`, process type `A01`, `outBiddingZone_Domain=10YNL----------L`
-  (the load document requires `outBiddingZone_Domain`; generation takes
-  `in_Domain` — both verified against the live API in the probe gate). The
-  series element is capitalized `TimeSeries` with `psrType` nested under
-  `MktPSRType`.
+- Actual generation per production type: `documentType=A75`, `processType=A16` (realised),
+  `in_Domain=10YNL----------L` (NL bidding zone EIC). One `TimeSeries` per `psrType`; `Period` carries
+  `timeInterval` (start/end, UTC) and `resolution` (PT60M/PT15M); `Point` carries 1-based `position` and
+  `quantity` in MW (`quantity_Measure_Unit.name` = MAW). Actual total load: `documentType=A65`,
+  `processType=A16`, `outBiddingZone_Domain=10YNL----------L` (the load document requires
+  `outBiddingZone_Domain`; generation takes `in_Domain` — both verified against the live API in the
+  probe gate). The series element is capitalized `TimeSeries` with `psrType` nested under `MktPSRType`.
+  Note: the `A69`/`A01` pair named in the original change request is the wind-and-solar day-ahead
+  forecast (businessType A93/A94) — it returns only B16/B18/B19 and its NL solar sums to roughly a
+  third of the CBS figure; the probe gate records those numbers as an appendix. `A75`/`A16` is the
+  actual per-type document.
 - Window parameters `periodStart`/`periodEnd` as `yyyyMMddHHmm` in UTC; maximum one year per request
   (`scripts/lib-entsoe.mjs` `entsoeWindows` chunks by year at most; the trailing 365-day window fits in
   two requests per document type).

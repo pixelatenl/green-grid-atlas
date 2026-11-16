@@ -20,9 +20,9 @@ Live: https://grid-atlas.pixelate.nl — source: this repository.
   field). Verified facts, pacing rule and attribution lines:
   [docs/data-notes.md](docs/data-notes.md).
 - **ENTSO-E Transparency Platform** — the source of the NL generation and
-  load series: actual generation per production type (document type `A69`)
-  and actual total load (document type `A65`), process type `A01`, bidding
-  zone EIC `10YNL----------L`, via `https://web-api.tp.entsoe.eu/api` with a
+  load series: actual generation per production type (document type `A75`)
+  and actual total load (document type `A65`), process type `A16` (realised),
+  bidding zone EIC `10YNL----------L`, via `https://web-api.tp.entsoe.eu/api` with a
   `securityToken` from the `ENTSOE_API_TOKEN` Actions secret (never logged or
   committed). UTC timestamps are converted to Europe/Amsterdam explicitly and
   verified hour-by-hour against the unchanged price series on every build.

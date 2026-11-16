@@ -5,10 +5,14 @@
 
     node --experimental-strip-types scripts/probe-entsoe.mjs
 
-  Fetches A69 (generation per type) and A65 (actual total load) for the NL
-  bidding zone 10YNL----------L for one summer sample day (2026-06-15), one
-  winter sample day (2026-01-15) and the trailing 365-day window, then
-  evaluates the three acceptance criteria:
+  Fetches the actual generation per production type (A75, processType A16)
+  and the actual total load (A65, processType A16) for the NL bidding zone
+  10YNL----------L for one summer sample day (2026-06-15), one winter sample
+  day (2026-01-15) and the trailing 365-day window, then evaluates the three
+  acceptance criteria. It also records the same figures for the document
+  pair named in the original change request (A69/A01), which the live API
+  answers with the wind-and-solar day-ahead forecast only, as a comparison
+  appendix in the PR description:
 
     1. summer midday solar peak in the multi-gigawatt range, consistent
        with the installed NL solar AC fleet (energy-charts installed_power,
@@ -39,6 +43,7 @@ import {
   verifyHourAlignment,
   PSR_TYPES,
   DOC_GENERATION,
+  AS_SPECIFIED,
   entsoeTs,
 } from "./lib-entsoe.mjs";
 import { ecUrl, fetchJsonPaced } from "./lib-fetch.mjs";
@@ -100,12 +105,12 @@ async function main() {
 
   const solarRecords = (env) => env.envelope.data.filter((r) => r.values.solar != null);
 
-  // Per-psrType detail of the summer-day A69 document, plus an alternative
+  // Per-psrType detail of the summer-day generation document, plus an alternative
   // query shape (inBiddingZone_Domain) to compare what the API returns.
   const perType = {};
   {
     const w = { periodStart: entsoeTs(SUMMER_DAY), periodEnd: entsoeTs(SUMMER_DAY + DAY_MS) };
-    const raw = await fetchEntsoe({ documentType: DOC_GENERATION, ...w }, { fresh: true, label: "A69 detail summer" });
+    const raw = await fetchEntsoe({ documentType: DOC_GENERATION, ...w }, { fresh: true, label: "generation detail summer" });
     if (raw.ok) {
       const { records } = parseEntsoeIntervals(raw.xml);
       const byPsr = new Map();
@@ -180,7 +185,7 @@ async function main() {
     }
   }
   report.figures.perTypeSummerDay = perType;
-  console.log("  per-type detail (summer day A69):", JSON.stringify(perType, null, 1));
+  console.log("  per-type detail (summer day, actual generation per type):", JSON.stringify(perType, null, 1));
 
   // Criterion 1: summer midday (10:00-15:00 UTC = 12:00-17:00 CEST) solar peak.
   const midday = solarRecords(summer).filter((r) => {
@@ -275,6 +280,47 @@ async function main() {
       meanAbsErrEntsoeVsEnergyChartsPctPoints: n ? Math.round((sumCrossErr / n) * 100) / 100 : null,
     };
     console.log(`  composition: recomputed-from-feeds vs served energy-charts share: mean abs err ${report.figures.composition.meanAbsErrRecomputedVsServedPctPoints} pct points over ${n} hours; ENTSO-E vs energy-charts share: mean abs err ${report.figures.composition.meanAbsErrEntsoeVsEnergyChartsPctPoints} pct points`);
+  }
+
+  // Appendix: the document pair named in the original change request
+  // (A69/A01). The live API answers it with the wind-and-solar day-ahead
+  // forecast (businessType A93/A94), so its figures are recorded for the
+  // PR description but do not gate the backfill.
+  {
+    const asSpec = { note: "A69/A01 is the wind-and-solar day-ahead forecast, not actual generation per type (verified live)" };
+    const summerDoc = await fetchEntsoe(
+      { documentType: AS_SPECIFIED.DOC, processType: AS_SPECIFIED.PROCESS, periodStart: entsoeTs(SUMMER_DAY), periodEnd: entsoeTs(SUMMER_DAY + DAY_MS) },
+      { fresh: true, label: "as-specified A69/A01 summer" },
+    );
+    if (summerDoc.ok) {
+      const { records, psrTypes } = parseEntsoeIntervals(summerDoc.xml);
+      const middaySolar = records.filter((r) => r.psrType === "B16" && new Date(r.timestamp).getUTCHours() >= 10 && new Date(r.timestamp).getUTCHours() < 15);
+      asSpec.summerDayPsrTypes = psrTypes;
+      asSpec.summerMiddaySolarPeakGW = middaySolar.length ? Math.round((Math.max(...middaySolar.map((r) => r.mw)) / 1000) * 100) / 100 : null;
+      asSpec.summerDaySolarGWh = Math.round(records.filter((r) => r.psrType === "B16").reduce((s, r) => s + (r.mw * r.ms) / 3_600_000 / 1000, 0));
+    }
+    const trailStart = entsoeTs(trailingStart);
+    const trailEnd = entsoeTs(now);
+    const chunks = [];
+    let cur = trailingStart;
+    while (cur < now) {
+      const yearEnd = Date.UTC(new Date(cur).getUTCFullYear() + 1, 0, 1);
+      const end = Math.min(now, yearEnd);
+      chunks.push({ periodStart: entsoeTs(cur), periodEnd: entsoeTs(end) });
+      cur = end;
+    }
+    let solarGWh = 0;
+    for (const c of chunks) {
+      const doc = await fetchEntsoe({ documentType: AS_SPECIFIED.DOC, processType: AS_SPECIFIED.PROCESS, ...c }, { fresh: true, label: "as-specified A69/A01 trailing" });
+      if (doc.ok) {
+        const { records } = parseEntsoeIntervals(doc.xml);
+        solarGWh += records.filter((r) => r.psrType === "B16").reduce((s, r) => s + (r.mw * r.ms) / 3_600_000 / 1000, 0);
+      }
+    }
+    asSpec.trailingSolarGWh = Math.round(solarGWh);
+    asSpec.trailingSolarTWhAnnualized = Math.round((solarGWh / 1000) * (365 / ((now - trailingStart) / DAY_MS)) * 10) / 10;
+    report.figures.asSpecifiedA69A01 = asSpec;
+    console.log("  as-specified A69/A01 appendix:", JSON.stringify(asSpec));
   }
 
   // Print the full report (figures only; the token is never printed).

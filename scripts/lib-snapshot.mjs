@@ -53,8 +53,8 @@ export const SOURCES = {
     docs: "https://transparency.entsoe.eu/content/operational-data",
     licenseNote:
       "NL generation and load are published on the ENTSO-E Transparency Platform pursuant to Regulation (EU) No 543/2013; reuse is subject to the platform's General Terms and Conditions (see transparency.entsoe.eu).",
-    documentTypes: { generationPerType: "A69", actualTotalLoad: "A65" },
-    processType: "A01",
+    documentTypes: { generationPerType: "A75", actualTotalLoad: "A65" },
+    processType: "A16",
     domainEIC: "10YNL----------L",
   },
 };
@@ -62,9 +62,9 @@ export const SOURCES = {
 /** ENTSO-E endpoint references recorded in the snapshot's sources.endpoints. */
 export const ENTSOE_ENDPOINTS = {
   entsoeGeneration:
-    "ENTSO-E web-api.tp.entsoe.eu/api documentType=A69 processType=A01 in_Domain=10YNL----------L (NL bidding zone)",
+    "ENTSO-E web-api.tp.entsoe.eu/api documentType=A75 processType=A16 in_Domain=10YNL----------L (NL bidding zone)",
   entsoeLoad:
-    "ENTSO-E web-api.tp.entsoe.eu/api documentType=A65 processType=A01 in_Domain=10YNL----------L (NL bidding zone)",
+    "ENTSO-E web-api.tp.entsoe.eu/api documentType=A65 processType=A16 outBiddingZone_Domain=10YNL----------L (NL bidding zone)",
 };
 
 /** NL representative point for the weather overlay (central Netherlands). */
@@ -418,7 +418,7 @@ export function recordsFromSamples(samples) {
 
 /**
  * Daily renewable share of load (percent) per Amsterdam-local day, computed
- * from ENTSO-E A69/A65 hourly slots as the mean of the hourly renewable
+ * from ENTSO-E A75/A65 hourly slots as the mean of the hourly renewable
  * share of load — the same daily-average definition the energy-charts
  * ren_share_daily_avg feed uses for the other zones (verified against its
  * per-type feeds, see docs/data-notes.md). Input: hour slots (bucketHours

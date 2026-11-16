@@ -9,11 +9,15 @@
     ENTSOE_API_TOKEN environment variable (Actions secret). The token is
     never logged, never written to the disk cache (cache keys are built
     from the document parameters only) and never committed.
-  - generation per production type: documentType=A69, processType=A01,
-    in_Domain=10YNL----------L (NL bidding zone); one timeSeries per
-    psrType, quantities in MW.
-  - actual total load: documentType=A65, processType=A01, out_Domain=10YNL----------L
-    (the load document takes out_Domain; generation takes in_Domain).
+  - actual generation per production type: documentType=A75,
+    processType=A16 (realised), in_Domain=10YNL----------L (NL bidding
+    zone); one TimeSeries per psrType, quantities in MW. (The A69/A01
+    combination returns only the wind-and-solar day-ahead forecast,
+    businessType A93/A94 — verified against the live API in the probe
+    gate; A75/A16 is the actual per-type document.)
+  - actual total load: documentType=A65, processType=A16 (realised),
+    outBiddingZone_Domain=10YNL----------L (the load document requires
+    outBiddingZone_Domain; generation takes in_Domain).
   - periodStart/periodEnd as yyyyMMddHHmm in UTC; maximum one year per
     request, so windows are chunked by year at most.
   - rate limit 400 requests/minute per IP and per token; a 429 imposes a
@@ -28,10 +32,10 @@
     build verifies the conversion hour-by-hour against an unchanged
     energy-charts series (verifyHourAlignment).
 
-  The renewable set is computed explicitly from the A69 per-type series:
+  The renewable set is computed explicitly from the A75 per-type series:
   Solar, Wind Onshore, Wind Offshore, Biomass, Hydro Run-of-river and
   poundage, Hydro Water Reservoir, Hydro Pumped Storage (generation side
-  only — A69 is generation), Geothermal, Waste. The remaining production
+  only — the generation document carries generation), Geothermal, Waste. The remaining production
   types feed the site's "others" bucket (the emission-factor table is
   keyed by energy-charts series ids and is not changed).
 */
@@ -47,9 +51,13 @@ const CACHE_DIR = path.join(HERE, ".cache");
 
 export const ENTSOE_BASE = "https://web-api.tp.entsoe.eu/api";
 export const NL_DOMAIN_EIC = "10YNL----------L";
-export const PROCESS_TYPE = "A01";
-export const DOC_GENERATION = "A69"; // actual generation per production type
+export const PROCESS_TYPE = "A16"; // realised
+export const DOC_GENERATION = "A75"; // actual generation per production type
 export const DOC_LOAD = "A65"; // actual total load
+// The document/process pair named in the original change request. It is
+// kept for the probe's as-specified comparison: A69/A01 is the wind-and-solar
+// day-ahead forecast, not actual generation per type.
+export const AS_SPECIFIED = { DOC: "A69", PROCESS: "A01" };
 
 const MIN_SPACING_MS = 1_000; // 60 req/min, far below the 400/min limit
 const MAX_ATTEMPTS = 4;
@@ -124,17 +132,17 @@ export function entsoeWindows(startUtcMs, endUtcMs) {
 
 /**
  * Build the request URL. The token never leaves this function's URL.
- * A69 (generation) takes in_Domain; A65 (actual total load) requires
+ * A75 (generation) takes in_Domain; A65 (actual total load) requires
  * outBiddingZone_Domain — same NL bidding zone EIC, different parameter
  * name (the API rejects A65 without it, verified in the probe gate).
  */
-function entsoeUrl({ documentType, periodStart, periodEnd }) {
+function entsoeUrl({ documentType, periodStart, periodEnd, processType = PROCESS_TYPE }) {
   const token = process.env.ENTSOE_API_TOKEN;
   if (!token) throw new Error("ENTSOE_API_TOKEN is not set (Actions secret); ENTSO-E fetch refused");
   const url = new URL(ENTSOE_BASE);
   url.searchParams.set("securityToken", token);
   url.searchParams.set("documentType", documentType);
-  url.searchParams.set("processType", PROCESS_TYPE);
+  url.searchParams.set("processType", processType);
   url.searchParams.set(documentType === DOC_LOAD ? "outBiddingZone_Domain" : "in_Domain", NL_DOMAIN_EIC);
   url.searchParams.set("periodStart", periodStart);
   url.searchParams.set("periodEnd", periodEnd);
@@ -269,7 +277,7 @@ export function parseEntsoeIntervals(xml) {
   const records = [];
   const seenPsr = new Set();
   for (const ts of series) {
-    // psrType sits under MktPSRType in A69 responses (a direct child or an
+    // psrType sits under MktPSRType in the generation responses (a direct child or an
     // attribute in some other document types); accept all shapes.
     const mkt = ts.MktPSRType ?? {};
     const rawPsr = ts["@_psrType"] ?? ts.psrType ?? mkt.psrType ?? mkt["@_psrType"] ?? null;
@@ -304,7 +312,7 @@ export function parseEntsoeIntervals(xml) {
 }
 
 /**
- * Fetch A69 + A65 over [startUtcMs, endUtcMs) (chunked by year at most)
+ * Fetch the generation (A75) + load (A65) documents over [startUtcMs, endUtcMs) (chunked by year at most)
  * and merge them into one energy-charts-shaped envelope the existing
  * pipeline already consumes:
  *   { data: [{ timestamp: ISO-Z, values: { <site series id>, load,
@@ -320,16 +328,16 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
   let failures = 0;
 
   for (const w of windows) {
-    const gen = await fetchEntsoe({ documentType: DOC_GENERATION, ...w }, { fresh, label: `A69 ${w.periodStart}-${w.periodEnd}` });
+    const gen = await fetchEntsoe({ documentType: DOC_GENERATION, ...w }, { fresh, label: `${DOC_GENERATION} ${w.periodStart}-${w.periodEnd}` });
     if (!gen.ok) {
       failures += 1;
-      console.warn(`  ENTSO-E A69 ${w.periodStart}-${w.periodEnd} FAILED: ${gen.error?.message ?? gen.error}`);
+      console.warn(`  ENTSO-E ${DOC_GENERATION} ${w.periodStart}-${w.periodEnd} FAILED: ${gen.error?.message ?? gen.error}`);
       continue;
     }
     const { records, psrTypes, tagHistogram, snippet } = parseEntsoeIntervals(gen.xml);
     for (const p of psrTypes) psrSeen.add(p);
     if (gen.ok && records.length === 0) {
-      console.warn(`  ENTSO-E A69 ${w.periodStart}-${w.periodEnd} returned no timeSeries; tags: ${JSON.stringify(tagHistogram)}; body starts: ${snippet}`);
+      console.warn(`  ENTSO-E ${DOC_GENERATION} ${w.periodStart}-${w.periodEnd} returned no timeSeries; tags: ${JSON.stringify(tagHistogram)}; body starts: ${snippet}`);
     }
     for (const r of records) {
       const psr = PSR_TYPES[r.psrType];
@@ -341,7 +349,7 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
       if (psr?.renewable) rec.renMW += r.mw;
       byTs.set(r.timestamp, rec);
     }
-    const load = await fetchEntsoe({ documentType: DOC_LOAD, ...w }, { fresh, label: `A65 ${w.periodStart}-${w.periodEnd}` });
+    const load = await fetchEntsoe({ documentType: DOC_LOAD, ...w }, { fresh, label: `${DOC_LOAD} ${w.periodStart}-${w.periodEnd}` });
     if (!load.ok) {
       failures += 1;
       console.warn(`  ENTSO-E A65 ${w.periodStart}-${w.periodEnd} FAILED: ${load.error?.message ?? load.error}`);
@@ -349,7 +357,7 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
     }
     const loadParsed = parseEntsoeIntervals(load.xml);
     if (load.ok && loadParsed.records.length === 0) {
-      console.warn(`  ENTSO-E A65 ${w.periodStart}-${w.periodEnd} returned no timeSeries; tags: ${JSON.stringify(loadParsed.tagHistogram)}; body starts: ${loadParsed.snippet}`);
+      console.warn(`  ENTSO-E ${DOC_LOAD} ${w.periodStart}-${w.periodEnd} returned no timeSeries; tags: ${JSON.stringify(loadParsed.tagHistogram)}; body starts: ${loadParsed.snippet}`);
     }
     for (const r of loadParsed.records) {
       const rec = byTs.get(r.timestamp) ?? { values: {}, renMW: 0, totalMW: 0, loadMW: null, ms: 0 };

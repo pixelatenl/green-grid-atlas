@@ -8,7 +8,7 @@
   scripts/lib-entsoe.mjs and docs/data-notes.md), the full 2015-to-present
   NL history — day-ahead price and per-neighbor flows from
   energy-charts.info v2, hourly weather from Open-Meteo, and generation per
-  production type (A69) plus actual total load (A65) from the ENTSO-E
+  production type (A75) plus actual total load (A65) from the ENTSO-E
   Transparency Platform for the NL bidding zone 10YNL----------L (the
   energy-charts NL solar series is defective; see docs/data-notes.md
   section 6). ENTSO-E timestamps are UTC and are converted to
@@ -76,7 +76,7 @@ async function fetchYear(year) {
     },
     { label: `open-meteo ${year}` },
   );
-  // ENTSO-E A69 + A65 for the same span, chunked by year at most (the API
+  // ENTSO-E A75 + A65 for the same span, chunked by year at most (the API
   // maximum window). UTC-year windows; slots merge by local hour key, so
   // the +01:00 boundary hour lands in the right local day either way.
   const entsoeStart = Date.UTC(year, 0, 1);
@@ -224,7 +224,7 @@ async function main() {
     scores: {
       retrievedAt,
       basis:
-        "renewable share of load, trailing 365 days, daily averages; nl from ENTSO-E Transparency Platform per-type data (A69/A65, processType A01, bidding zone 10YNL----------L), all other zones from energy-charts.info /v2/ren_share_daily_avg",
+        "renewable share of load, trailing 365 days, daily averages; nl from ENTSO-E Transparency Platform per-type data (A75/A65, processType A16, bidding zone 10YNL----------L), all other zones from energy-charts.info /v2/ren_share_daily_avg",
       composition: "score = 0.5 x mean daily renewable share of load + 0.5 x share of days with renewable share >= 50% (scaled to 0-100)",
       countries,
     },

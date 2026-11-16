@@ -5,7 +5,7 @@
     node --experimental-strip-types scripts/snapshot.mjs
 
   Fetches yesterday complete, today partial, and price_next_day (published
-  around 13:00 CET) from energy-charts.info; NL generation per type (A69)
+  around 13:00 CET) from energy-charts.info; NL generation per type (A75)
   and actual total load (A65) from the ENTSO-E Transparency Platform (NL
   bidding zone 10YNL----------L, UTC converted to Europe/Amsterdam through
   the shared slot keying and verified hour-by-hour against the unchanged
@@ -117,7 +117,7 @@ async function main() {
     },
     { label: "open-meteo rolling", fresh: true },
   );
-  // ENTSO-E A69 + A65 for the NL zone over the trailing year (chunked by
+  // ENTSO-E A75 + A65 for the NL zone over the trailing year (chunked by
   // year at most): the last ROLLING_DAYS of it feed the rolling trailing
   // days, the full year feeds the NL score (daily renewable share of load).
   const entsoe = await fetchNlPowerEnvelope(now.getTime() - 365 * DAY_MS, now.getTime(), { fresh: true });
