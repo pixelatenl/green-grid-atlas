@@ -454,6 +454,40 @@ async function main() {
       }
       report.figures.duplicateCheckSummerDay = dup;
       console.log("  duplicate check (summer day):", JSON.stringify(dup, null, 1));
+
+      // Raw period structure: every Period of every TimeSeries with its
+      // resolution string, point count and interval, to see where the
+      // duplicate/huge-ms records come from.
+      {
+        const { XMLParser } = await import("fast-xml-parser");
+        const p = new XMLParser({
+          ignoreAttributes: false,
+          attributeNamePrefix: "@_",
+          isArray: (name) => name === "TimeSeries" || name === "timeSeries" || name === "Period" || name === "Point",
+          parseTagValue: false,
+          trimValues: true,
+        });
+        const doc = p.parse(doc.xml);
+        const seriesList = [
+          ...(doc?.GL_MarketDocument?.TimeSeries ?? []),
+          ...(doc?.GL_MarketDocument?.timeSeries ?? []),
+          ...Object.values(doc ?? {}).flatMap((v) => (v?.TimeSeries ?? [])),
+        ];
+        const struct = seriesList.map((ts) => ({
+          psr: ts.MktPSRType?.psrType ?? ts.MktPSRType?.["@_psrType"] ?? ts.psrType ?? null,
+          mRID: ts.mRID,
+          periods: (ts.Period ?? []).map((per) => ({
+            resolution: per.resolution ?? per["@_resolution"] ?? null,
+            points: (per.Point ?? []).length,
+            start: per.timeInterval?.start ?? per.timeInterval?.["@_start"] ?? null,
+            end: per.timeInterval?.end ?? per.timeInterval?.["@_end"] ?? null,
+            firstPositions: (per.Point ?? []).slice(0, 3).map((pt) => pt["@_position"] ?? pt.position),
+            lastPositions: (per.Point ?? []).slice(-3).map((pt) => pt["@_position"] ?? pt.position),
+          })),
+        }));
+        report.figures.periodStructure = struct;
+        console.log("  period structure:", JSON.stringify(struct));
+      }
     }
   }
 
