@@ -182,7 +182,7 @@ export async function fetchEntsoe(params, { fresh = false, label = "" } = {}) {
         // retrying cannot help, so fail immediately instead of burning
         // attempts against the ten-minute ban.
         if (response.status >= 400 && response.status < 500) {
-          const body = (await response.text().catch(() => "")).slice(0, 300);
+          const body = (await response.text().catch(() => "")).slice(0, 1500);
           return {
             ok: false,
             error: new Error(`HTTP ${response.status} for ENTSO-E ${label || params.documentType}${body ? `: ${body}` : ""}`),
@@ -240,6 +240,21 @@ function resolutionMs(res) {
   return ms > 0 ? ms : null;
 }
 
+/** Recursive histogram of tag names (debug aid when a parse finds nothing). */
+function tagHistogramOf(node, hist = {}) {
+  if (node == null || typeof node !== "object") return hist;
+  if (Array.isArray(node)) {
+    for (const item of node) tagHistogramOf(item, hist);
+    return hist;
+  }
+  for (const [k, v] of Object.entries(node)) {
+    if (k.startsWith("@_")) continue;
+    hist[k] = (hist[k] ?? 0) + 1;
+    tagHistogramOf(v, hist);
+  }
+  return hist;
+}
+
 /**
  * Expand one ENTSO-E document XML into flat interval records:
  * [{ timestamp: ISO-Z, psrType: string|null, mw: number }].
@@ -276,9 +291,11 @@ export function parseEntsoeIntervals(xml) {
     records,
     psrTypes: [...seenPsr].sort(),
     // Debug aid for the probe gate: the response body never contains the
-    // token, so a short snippet is safe to log when nothing was found.
+    // token, so a short snippet and a tag histogram are safe to log when
+    // nothing was found.
     rootKeys: records.length === 0 ? Object.keys(doc ?? {}) : undefined,
-    snippet: records.length === 0 ? String(xml ?? "").slice(0, 400) : undefined,
+    snippet: records.length === 0 ? String(xml ?? "").slice(0, 2500) : undefined,
+    tagHistogram: records.length === 0 ? tagHistogramOf(doc) : undefined,
   };
 }
 
@@ -305,10 +322,10 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
       console.warn(`  ENTSO-E A69 ${w.periodStart}-${w.periodEnd} FAILED: ${gen.error?.message ?? gen.error}`);
       continue;
     }
-    const { records, psrTypes, rootKeys, snippet } = parseEntsoeIntervals(gen.xml);
+    const { records, psrTypes, tagHistogram, snippet } = parseEntsoeIntervals(gen.xml);
     for (const p of psrTypes) psrSeen.add(p);
     if (gen.ok && records.length === 0) {
-      console.warn(`  ENTSO-E A69 ${w.periodStart}-${w.periodEnd} returned no timeSeries; root keys: ${JSON.stringify(rootKeys)}; body starts: ${snippet}`);
+      console.warn(`  ENTSO-E A69 ${w.periodStart}-${w.periodEnd} returned no timeSeries; tags: ${JSON.stringify(tagHistogram)}; body starts: ${snippet}`);
     }
     for (const r of records) {
       const psr = PSR_TYPES[r.psrType];
@@ -328,7 +345,7 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
     }
     const loadParsed = parseEntsoeIntervals(load.xml);
     if (load.ok && loadParsed.records.length === 0) {
-      console.warn(`  ENTSO-E A65 ${w.periodStart}-${w.periodEnd} returned no timeSeries; root keys: ${JSON.stringify(loadParsed.rootKeys)}; body starts: ${loadParsed.snippet}`);
+      console.warn(`  ENTSO-E A65 ${w.periodStart}-${w.periodEnd} returned no timeSeries; tags: ${JSON.stringify(loadParsed.tagHistogram)}; body starts: ${loadParsed.snippet}`);
     }
     for (const r of loadParsed.records) {
       const rec = byTs.get(r.timestamp) ?? { values: {}, renMW: 0, totalMW: 0, loadMW: null, ms: 0 };
