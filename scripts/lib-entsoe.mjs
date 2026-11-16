@@ -124,8 +124,9 @@ export function entsoeWindows(startUtcMs, endUtcMs) {
 
 /**
  * Build the request URL. The token never leaves this function's URL.
- * A69 (generation) takes in_Domain; A65 (actual total load) takes
- * out_Domain — same NL bidding zone EIC, different parameter name.
+ * A69 (generation) takes in_Domain; A65 (actual total load) requires
+ * outBiddingZone_Domain — same NL bidding zone EIC, different parameter
+ * name (the API rejects A65 without it, verified in the probe gate).
  */
 function entsoeUrl({ documentType, periodStart, periodEnd }) {
   const token = process.env.ENTSOE_API_TOKEN;
@@ -134,7 +135,7 @@ function entsoeUrl({ documentType, periodStart, periodEnd }) {
   url.searchParams.set("securityToken", token);
   url.searchParams.set("documentType", documentType);
   url.searchParams.set("processType", PROCESS_TYPE);
-  url.searchParams.set(documentType === DOC_LOAD ? "out_Domain" : "in_Domain", NL_DOMAIN_EIC);
+  url.searchParams.set(documentType === DOC_LOAD ? "outBiddingZone_Domain" : "in_Domain", NL_DOMAIN_EIC);
   url.searchParams.set("periodStart", periodStart);
   url.searchParams.set("periodEnd", periodEnd);
   return url;
@@ -210,7 +211,9 @@ export async function fetchEntsoe(params, { fresh = false, label = "" } = {}) {
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
-  isArray: (name) => name === "timeSeries" || name === "Period" || name === "Point",
+  // The live documents use capitalized TimeSeries (some use lowercase);
+  // Period and Point are capitalized in both.
+  isArray: (name) => name === "TimeSeries" || name === "timeSeries" || name === "Period" || name === "Point",
   parseTagValue: false,
   trimValues: true,
 });
@@ -262,13 +265,14 @@ function tagHistogramOf(node, hist = {}) {
  */
 export function parseEntsoeIntervals(xml) {
   const doc = parser.parse(xml);
-  const series = collect(doc, "timeSeries");
+  const series = [...collect(doc, "TimeSeries"), ...collect(doc, "timeSeries")];
   const records = [];
   const seenPsr = new Set();
   for (const ts of series) {
-    // psrType is a child element in A69 responses (an attribute in some
-    // other document types); accept both.
-    const rawPsr = ts["@_psrType"] ?? ts.psrType ?? null;
+    // psrType sits under MktPSRType in A69 responses (a direct child or an
+    // attribute in some other document types); accept all shapes.
+    const mkt = ts.MktPSRType ?? {};
+    const rawPsr = ts["@_psrType"] ?? ts.psrType ?? mkt.psrType ?? mkt["@_psrType"] ?? null;
     const psrType = typeof rawPsr === "string" ? rawPsr : (rawPsr?.["#text"] ?? null);
     if (psrType) seenPsr.add(psrType);
     const periods = ts.Period ?? [];
