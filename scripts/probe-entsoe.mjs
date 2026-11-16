@@ -413,6 +413,48 @@ async function main() {
     }
     report.figures.b16b20SummerProfileMW = prof;
     console.log("  B16/B20 summer-day hourly MW:", JSON.stringify(prof));
+
+    // Duplicate/overlap check: same (timestamp, psrType) appearing more than
+    // once would double-count energy, so compare summed vs unique-ts energy.
+    {
+      const doc = await fetchEntsoe(
+        { documentType: DOC_GENERATION, periodStart: entsoeTs(SUMMER_DAY), periodEnd: entsoeTs(SUMMER_DAY + DAY_MS) },
+        { fresh: true, label: "A75 summer dup check" },
+      );
+      const dup = {};
+      if (doc.ok) {
+        const { records } = parseEntsoeIntervals(doc.xml);
+        const byPsrTs = new Map();
+        for (const r of records) {
+          const key = `${r.psrType}|${r.timestamp}`;
+          const acc = byPsrTs.get(key) ?? { n: 0, sum: 0 };
+          acc.n += 1;
+          acc.sum += r.mw * (r.ms / 3_600_000);
+          byPsrTs.set(key, acc);
+        }
+        const perPsr = new Map();
+        for (const [key, acc] of byPsrTs) {
+          const psr = key.split("|")[0];
+          const p = perPsr.get(psr) ?? { ts: 0, dups: 0, energyAll: 0 };
+          p.ts += 1;
+          p.dups += acc.n - 1;
+          p.energyAll += acc.sum;
+          perPsr.set(psr, p);
+        }
+        for (const [psr, p] of perPsr) {
+          const allRecords = records.filter((r) => r.psrType === psr);
+          dup[psr] = {
+            name: PSR_TYPES[psr]?.name ?? "UNMAPPED",
+            records: allRecords.length,
+            uniqueTs: p.ts,
+            duplicateRecords: p.dups,
+            energyMWhAll: Math.round(p.energyAll * 1000),
+          };
+        }
+      }
+      report.figures.duplicateCheckSummerDay = dup;
+      console.log("  duplicate check (summer day):", JSON.stringify(dup, null, 1));
+    }
   }
 
   // Print the full report (figures only; the token is never printed).
