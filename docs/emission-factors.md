@@ -21,7 +21,7 @@ access under **Creative Commons Attribution-NonCommercial-ShareAlike 3.0 IGO
 | `nuclear` | 12 | Nuclear | same table, nuclear median |
 | `wind_onshore` | 11 | Wind onshore | same table, wind onshore median |
 | `wind_offshore` | 12 | Wind offshore | same table, wind offshore median |
-| `solar` | 46 | Solar PV | same table, solar PV median |
+| `distribution_renewables` | 46 | Distribution-connected renewables (ENTSO-E B16+B20 TSO estimate, NL) | same table, solar PV median |
 
 ## Computed intensity rule
 

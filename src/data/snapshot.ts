@@ -21,7 +21,8 @@ export interface TrailingDay {
   residual: (number | null)[];
   netImport: (number | null)[];
   windMW: (number | null)[];
-  solarMW: (number | null)[];
+  /** ENTSO-E B16+B20: the TSO's aggregate estimate of distribution-connected renewables. */
+  distributionRenewablesMW: (number | null)[];
   flows: Record<string, (number | null)[]>;
   weather: { wind: (number | null)[]; solar: (number | null)[]; temp: (number | null)[] } | null;
 }
@@ -76,7 +77,7 @@ export interface Snapshot {
       licenseUrl: string;
       licencePage: string;
     };
-    /** ENTSO-E Transparency Platform: NL generation (A69) and load (A65). */
+    /** ENTSO-E Transparency Platform: NL actual generation per type (A75) and actual total load (A65). */
     entsoe?: {
       name: string;
       url: string;

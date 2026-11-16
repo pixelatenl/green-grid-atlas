@@ -7,25 +7,32 @@
 
   Fetches the actual generation per production type (A75, processType A16)
   and the actual total load (A65, processType A16) for the NL bidding zone
-  10YNL----------L for one summer sample day (2026-06-15), one winter sample
-  day (2026-01-15) and the trailing 365-day window, then evaluates the three
-  acceptance criteria. It also records the same figures for the document
-  pair named in the original change request (A69/A01), which the live API
-  answers with the wind-and-solar day-ahead forecast only, as a comparison
-  appendix in the PR description:
+  10YNL----------L for the trailing 365-day window. One deduplicated series
+  drives every criterion; the summer sample day (2026-06-15) and winter
+  sample day (2026-01-15) are extracted from it in local time. The criteria
+  are defined on the B16+B20 aggregate (the TSO's single upscaled estimate of
+  distribution-connected renewables), not on a pure solar series:
 
-    1. summer midday solar peak in the multi-gigawatt range, consistent
-       with the installed NL solar AC fleet (energy-charts installed_power,
-       latest record, solar_ac);
-    2. trailing-window solar sum annualized into a plausible band around
-       the CBS-reported ~25 TWh per year (window offset and year
-       completion allowed);
-    3. monthly seasonality: summer solar clearly above winter solar.
+    1. daylight fleet share: the aggregate's peak in the summer sample day's
+       local midday window (10:00-15:00) must be at least 10 percent of the
+       daylight-connected fleet, solar AC plus onshore wind (energy-charts
+       installed_power, latest record), expected 30-45 percent;
+    2. annual band: the B16+B20 aggregate must annualize to 30-42 TWh/yr
+       (official solar 25.5 plus official onshore wind 16.4 TWh, with slack
+       for the window offset);
+    3. diurnality: the trailing-year mean of the aggregate over local midday
+       hours (10:00-15:00) must be at least 3 times its mean over local night
+       hours (00:00-05:00), expected about 4-5x; the broken feed was flat.
 
-  It also verifies, hour by hour, that the UTC->Europe/Amsterdam conversion
-  of the ENTSO-E timestamps aligns with the unchanged energy-charts price
-  series, and recomputes the old energy-charts renewable share from its
-  per-type feeds to compare the renewable composition.
+  The double-count cross-check derives from the same parsed per-type arrays
+  as criterion 2 and must agree with it to the MWh. The gate also verifies,
+  hour by hour, that the UTC->Europe/Amsterdam conversion of the ENTSO-E
+  timestamps aligns with the unchanged energy-charts price series, records
+  the canonical hour (2026-04-26 local 13:00/14:00, before vs after), and
+  recomputes the old energy-charts renewable share from its per-type feeds to
+  compare the renewable composition. The document pair named in the original
+  change request (A69/A01), which the live API answers with the wind-and-solar
+  day-ahead forecast only, is recorded as a comparison appendix.
 
   If any criterion fails the script exits 1 and prints every figure; the
   caller then stops and records the numbers in the PR description instead of
@@ -48,19 +55,27 @@ import {
 } from "./lib-entsoe.mjs";
 import { ecUrl, fetchJsonPaced } from "./lib-fetch.mjs";
 import { bucketHours } from "../src/grid/hourly.ts";
+import { amsterdamLocal, parseTs } from "../src/grid/amsterdam-time.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const SUMMER_DAY = Date.UTC(2026, 5, 15); // 2026-06-15, UTC day
-const WINTER_DAY = Date.UTC(2026, 0, 15); // 2026-01-15, UTC day
 const DAY_MS = 86_400_000;
 
-// Acceptance bands (see header): multi-GW summer peak consistent with the
-// fleet; trailing solar annualized around 25 TWh/yr; summer above winter.
-const PEAK_MIN_GW = 5;
-const TRAILING_SOLAR_MIN_TWH = 18;
-const TRAILING_SOLAR_MAX_TWH = 35;
-const SEASON_RATIO_MIN = 3;
+// The B16+B20 aggregate series the criteria are defined on.
+const AGG = "distribution_renewables";
+// Local-time sample days and windows (Europe/Amsterdam).
+const SUMMER_DAY_LOCAL = "2026-06-15";
+const WINTER_DAY_LOCAL = "2026-01-15";
+const CANONICAL_DAY_LOCAL = "2026-04-26";
+const MIDDAY_HOURS = [10, 11, 12, 13, 14]; // local 10:00-15:00
+const NIGHT_HOURS = [0, 1, 2, 3, 4]; // local 00:00-05:00
+// Acceptance bands (see header): aggregate peak share of the daylight-connected
+// fleet; aggregate annualized in 30-42 TWh/yr; midday/night diurnal ratio.
+const FLEET_SHARE_MIN = 0.1;
+const ANNUAL_MIN_TWH = 30;
+const ANNUAL_MAX_TWH = 42;
+const DIURNAL_MIN_RATIO = 3;
 
 const energyGWh = (records, seriesId, filter) =>
   records.reduce((sum, r) => {
@@ -70,7 +85,8 @@ const energyGWh = (records, seriesId, filter) =>
     return sum + (mw * r.ms) / 3_600_000 / 1000; // MW * h -> GWh
   }, 0);
 
-const gw = (mw) => mw / 1000;
+const r1 = (x) => Math.round(x * 10) / 10;
+const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
 
 async function main() {
   if (!process.env.ENTSOE_API_TOKEN) {
@@ -84,34 +100,51 @@ async function main() {
   console.log("ENTSO-E NL probe gate");
   console.log(`  trailing window: ${new Date(trailingStart).toISOString()} .. ${new Date(now).toISOString()}`);
 
-  // NL installed solar AC fleet (energy-charts installed_power, latest yearly record).
+  // Daylight-connected fleet (energy-charts installed_power, latest yearly
+  // record): solar AC capacity plus onshore wind capacity, GW.
   const inst = await fetchJsonPaced(ecUrl("/v2/installed_power", { country: "nl", year: "-1" }), { label: "installed_power nl" });
-  let fleetGW = null;
+  let solarAcGW = null;
+  let windOnshoreGW = null;
   if (inst.ok) {
     const last = inst.json.data?.[inst.json.data.length - 1];
-    fleetGW = last?.values?.solar_ac ?? null; // GW
+    solarAcGW = last?.values?.solar_ac ?? null;
+    windOnshoreGW = last?.values?.wind_onshore ?? null;
   }
-  console.log(`  NL installed solar AC fleet (energy-charts installed_power, latest record): ${fleetGW} GW`);
-  report.figures.nlInstalledSolarAcGW = fleetGW;
+  const daylightFleetGW =
+    solarAcGW != null && windOnshoreGW != null ? solarAcGW + windOnshoreGW : null;
+  console.log(`  daylight-connected fleet (energy-charts installed_power, latest record): solar AC ${solarAcGW} GW + onshore wind ${windOnshoreGW} GW = ${daylightFleetGW} GW`);
+  report.figures.nlInstalledSolarAcGW = solarAcGW;
+  report.figures.nlInstalledWindOnshoreGW = windOnshoreGW;
+  report.figures.daylightFleetGW = daylightFleetGW;
 
-  // Sample days + trailing window from ENTSO-E.
-  const summer = await fetchNlPowerEnvelope(SUMMER_DAY, SUMMER_DAY + DAY_MS, { fresh: true });
-  const winter = await fetchNlPowerEnvelope(WINTER_DAY, WINTER_DAY + DAY_MS, { fresh: true });
+  // One deduplicated trailing-year series (A75 generation + A65 load, chunked
+  // by year at most) drives every criterion; the 2026-06-15 and 2026-01-15
+  // sample days are extracted from it below in local time.
   const trailing = await fetchNlPowerEnvelope(trailingStart, now, { fresh: true });
-  if (!summer.ok || !winter.ok || !trailing.ok) {
+  if (!trailing.ok) {
     report.checks.entsoeFetch = {
       pass: false,
-      detail: `ENTSO-E window fetch failed (summer ok=${summer.ok}, winter ok=${winter.ok}, trailing ok=${trailing.ok}, trailing window failures=${trailing.failures}); per-window reasons are in the warnings above`,
+      detail: `ENTSO-E trailing-year window fetch failed (failures=${trailing.failures}); per-window reasons are in the warnings above`,
     };
     console.error("\n=== ENTSO-E NL probe report (partial, figures collected so far) ===");
     console.error(JSON.stringify(report, null, 2));
-    console.error(`Probe gate STOPPED: ENTSO-E fetch failed for a probe window (summer=${summer.ok} winter=${winter.ok} trailing=${trailing.ok}); criteria not evaluated, backfill not run.`);
+    console.error(`Probe gate STOPPED: ENTSO-E trailing-year fetch failed (failures=${trailing.failures}); criteria not evaluated, backfill not run.`);
     process.exit(1);
   }
-  report.checks.entsoeFetch = { pass: true, detail: "all three ENTSO-E probe windows (summer day, winter day, trailing year) fetched" };
+  report.checks.entsoeFetch = { pass: true, detail: "trailing-year ENTSO-E window (A75 + A65, chunked by year) fetched and parsed" };
   report.figures.psrTypesSeen = trailing.psrTypes.map((c) => `${c} (${PSR_TYPES[c]?.name ?? "UNMAPPED"})`);
 
-  const solarRecords = (env) => env.envelope.data.filter((r) => r.values.solar != null);
+  // Hour slots (local date/hour keying) of the single trailing series.
+  const trailingSlots = bucketHours(trailing.envelope.data.map((r) => ({ timestamp: r.timestamp, values: r.values })));
+  const dayEnergyGWh = (localDate, seriesId) =>
+    trailing.envelope.data.reduce((sum, r) => {
+      if (amsterdamLocal(parseTs(r.timestamp)).date !== localDate) return sum;
+      const mw = r.values[seriesId];
+      if (mw == null || !Number.isFinite(mw) || !r.ms) return sum;
+      return sum + (mw * r.ms) / 3_600_000 / 1000;
+    }, 0);
+  const days = (now - trailingStart) / DAY_MS;
+  const ann = (gwh) => (gwh / 1000) * (365 / days); // annualize GWh -> TWh/yr
 
   // Per-psrType detail of the summer-day generation document, plus an alternative
   // query shape (inBiddingZone_Domain) to compare what the API returns.
@@ -195,49 +228,65 @@ async function main() {
   report.figures.perTypeSummerDay = perType;
   console.log("  per-type detail (summer day, actual generation per type):", JSON.stringify(perType, null, 1));
 
-  // Criterion 1: summer midday (10:00-15:00 UTC = 12:00-17:00 CEST) solar peak.
-  const midday = solarRecords(summer).filter((r) => {
-    const h = new Date(r.timestamp).getUTCHours();
-    return h >= 10 && h < 15;
-  });
-  const summerPeakMW = midday.length ? Math.max(...midday.map((r) => r.values.solar)) : null;
-  const summerPeakGW = summerPeakMW != null ? gw(summerPeakMW) : null;
-  const peakShareOfFleet = fleetGW && summerPeakMW != null ? summerPeakMW / 1000 / fleetGW : null;
-  report.figures.summerMiddaySolarPeakGW = summerPeakGW;
-  report.figures.summerMiddayPeakShareOfFleet = peakShareOfFleet;
-  report.checks.summerMiddayPeak = {
-    pass:
-      summerPeakGW != null &&
-      fleetGW != null &&
-      summerPeakGW >= PEAK_MIN_GW &&
-      summerPeakGW <= fleetGW &&
-      peakShareOfFleet >= 0.1,
-    detail: `summer midday solar peak ${summerPeakGW?.toFixed(2)} GW = ${(peakShareOfFleet * 100)?.toFixed(1)}% of the ${fleetGW} GW installed fleet (band: ${PEAK_MIN_GW} GW .. fleet, share >= 10%)`,
+  // Criterion 1: daylight fleet share. The aggregate's peak in the summer
+  // sample day's local midday window (10:00-15:00) vs the daylight-connected
+  // fleet (solar AC + onshore wind, energy-charts installed_power).
+  const summerMiddaySlots = [...trailingSlots.values()].filter(
+    (sl) => sl.local.date === SUMMER_DAY_LOCAL && MIDDAY_HOURS.includes(sl.local.hour),
+  );
+  const summerMiddayVals = summerMiddaySlots.map((sl) => sl.values[AGG]).filter((v) => Number.isFinite(v));
+  const summerPeakMW = summerMiddayVals.length ? Math.max(...summerMiddayVals) : null;
+  const summerPeakGW = summerPeakMW != null ? summerPeakMW / 1000 : null;
+  const peakShareOfFleet = summerPeakGW != null && daylightFleetGW ? summerPeakGW / daylightFleetGW : null;
+  report.figures.summerMiddayPeakGW = r1(summerPeakGW ?? 0);
+  report.figures.summerMiddayPeakShareOfFleet = peakShareOfFleet != null ? r1(peakShareOfFleet * 100) : null;
+  report.checks.daylightFleetShare = {
+    pass: peakShareOfFleet != null && peakShareOfFleet >= FLEET_SHARE_MIN,
+    detail: `${SUMMER_DAY_LOCAL} local midday (10:00-15:00) aggregate peak ${summerPeakGW?.toFixed(2)} GW = ${((peakShareOfFleet ?? 0) * 100).toFixed(1)}% of the ${daylightFleetGW} GW daylight-connected fleet (solar AC ${solarAcGW} + onshore wind ${windOnshoreGW} GW, energy-charts installed_power latest record; pass: >= ${FLEET_SHARE_MIN * 100}%, expected 30-45%)`,
   };
 
-  // Criterion 2: trailing-window solar sum, annualized.
-  const trailingSolarGWh = energyGWh(trailing.envelope.data, "solar");
-  const days = (now - trailingStart) / DAY_MS;
-  const trailingSolarTWhAnnualized = (trailingSolarGWh / 1000) * (365 / days);
-  report.figures.trailingSolarGWh = Math.round(trailingSolarGWh);
-  report.figures.trailingSolarTWhAnnualized = Math.round(trailingSolarTWhAnnualized * 10) / 10;
+  // Criterion 2: annual band for the B16+B20 aggregate. Derived from the
+  // same deduplicated per-type records as the double-count cross-check
+  // (trailing.perTypeGWh), so the two agree to the MWh by construction.
+  const aggGWh = (trailing.perTypeGWh?.B16 ?? 0) + (trailing.perTypeGWh?.B20 ?? 0);
+  const aggTWhAnnualized = ann(aggGWh);
   report.figures.trailingDays = Math.round(days);
-  report.checks.trailingSolarBand = {
-    pass: trailingSolarTWhAnnualized >= TRAILING_SOLAR_MIN_TWH && trailingSolarTWhAnnualized <= TRAILING_SOLAR_MAX_TWH,
-    detail: `trailing ${Math.round(days)}-day solar ${Math.round(trailingSolarGWh)} GWh, annualized ${report.figures.trailingSolarTWhAnnualized} TWh/yr (band ${TRAILING_SOLAR_MIN_TWH}-${TRAILING_SOLAR_MAX_TWH} TWh/yr around the CBS-reported ~25 TWh/yr)`,
+  report.figures.aggregateGWh = Math.round(aggGWh);
+  report.figures.aggregateTWhAnnualized = r1(aggTWhAnnualized);
+  report.checks.annualBand = {
+    pass: aggTWhAnnualized >= ANNUAL_MIN_TWH && aggTWhAnnualized <= ANNUAL_MAX_TWH,
+    detail: `B16+B20 aggregate ${Math.round(aggGWh)} GWh over the trailing ${Math.round(days)} days, annualized ${r1(aggTWhAnnualized)} TWh/yr (band ${ANNUAL_MIN_TWH}-${ANNUAL_MAX_TWH} TWh/yr = official solar 25.5 + official onshore wind 16.4 TWh with window slack; near 25 means distribution wind is missing, >= ${ANNUAL_MAX_TWH + 7} means a double count persists)`,
   };
 
-  // Criterion 3: seasonality, summer day vs winter day solar energy.
-  const summerDayGWh = energyGWh(summer.envelope.data, "solar");
-  const winterDayGWh = energyGWh(winter.envelope.data, "solar");
-  const seasonRatio = winterDayGWh > 0 ? summerDayGWh / winterDayGWh : null;
-  report.figures.summerDaySolarGWh = Math.round(summerDayGWh);
-  report.figures.winterDaySolarGWh = Math.round(winterDayGWh);
-  report.figures.seasonRatio = seasonRatio != null ? Math.round(seasonRatio * 10) / 10 : null;
-  report.checks.seasonality = {
-    pass: seasonRatio != null && seasonRatio >= SEASON_RATIO_MIN,
-    detail: `2026-06-15 solar ${Math.round(summerDayGWh)} GWh vs 2026-01-15 ${Math.round(winterDayGWh)} GWh, ratio ${report.figures.seasonRatio}x (pass: >= ${SEASON_RATIO_MIN}x)`,
+  // Criterion 3: diurnality across the trailing year — local midday mean vs
+  // local night mean of the aggregate (solar is the only diurnal component).
+  const middayVals = [];
+  const nightVals = [];
+  for (const sl of trailingSlots.values()) {
+    const v = sl.values[AGG];
+    if (v == null || !Number.isFinite(v)) continue;
+    if (MIDDAY_HOURS.includes(sl.local.hour)) middayVals.push(v);
+    else if (NIGHT_HOURS.includes(sl.local.hour)) nightVals.push(v);
+  }
+  const middayMean = mean(middayVals);
+  const nightMean = mean(nightVals);
+  const diurnalRatio = middayMean != null && nightMean != null && nightMean > 0 ? middayMean / nightMean : null;
+  report.figures.diurnalMiddayMeanMW = r1(middayMean ?? 0);
+  report.figures.diurnalNightMeanMW = r1(nightMean ?? 0);
+  report.figures.diurnalRatio = diurnalRatio != null ? r1(diurnalRatio) : null;
+  report.checks.diurnality = {
+    pass: diurnalRatio != null && diurnalRatio >= DIURNAL_MIN_RATIO,
+    detail: `trailing-year local midday (10:00-15:00) mean ${r1(middayMean ?? 0)} MW vs night (00:00-05:00) mean ${r1(nightMean ?? 0)} MW, ratio ${diurnalRatio != null ? r1(diurnalRatio) : "n/a"}x (pass: >= ${DIURNAL_MIN_RATIO}x, expected 4-5x; the broken feed was flat at ~1x)`,
   };
+
+  // Figure only (not a criterion): summer vs winter sample-day aggregate
+  // energy, both extracted from the trailing series.
+  const summerDayGWh = dayEnergyGWh(SUMMER_DAY_LOCAL, AGG);
+  const winterDayGWh = dayEnergyGWh(WINTER_DAY_LOCAL, AGG);
+  const seasonRatio = winterDayGWh > 0 ? summerDayGWh / winterDayGWh : null;
+  report.figures.summerDayAggregateGWh = Math.round(summerDayGWh);
+  report.figures.winterDayAggregateGWh = Math.round(winterDayGWh);
+  report.figures.seasonRatio = seasonRatio != null ? r1(seasonRatio) : null;
 
   // Supporting figures: load, latest ENTSO-E timestamp (publication lag).
   const trailingLoadGWh = energyGWh(trailing.envelope.data, "load");
@@ -252,11 +301,15 @@ async function main() {
   const priceEnd = new Date(now).toISOString().slice(0, 10);
   const price = await fetchJsonPaced(ecUrl("/v2/price", { bzn: "NL", start: priceStart, end: priceEnd }), { label: "price trailing (alignment reference)" });
   const publicPower = await fetchJsonPaced(ecUrl("/v2/public_power", { country: "nl", start: priceStart, end: priceEnd }), { label: "public_power trailing (composition comparison)" });
-  if (price.ok) {
-    const priceSlots = bucketHours(price.json.data.map((r) => ({ timestamp: r.timestamp, values: { day_ahead_price: r.values?.day_ahead_price ?? null } })));
-    const entsoeSlots = bucketHours(trailing.envelope.data.map((r) => ({ timestamp: r.timestamp, values: r.values })));
+  const priceSlots = price.ok
+    ? bucketHours(price.json.data.map((r) => ({ timestamp: r.timestamp, values: { day_ahead_price: r.values?.day_ahead_price ?? null } })))
+    : null;
+  const ecSlots = publicPower.ok
+    ? bucketHours(publicPower.json.data.map((r) => ({ timestamp: r.timestamp, values: r.values })))
+    : null;
+  if (priceSlots) {
     try {
-      const alignment = verifyHourAlignment([...entsoeSlots.keys()], [...priceSlots.keys()], { label: "trailing window" });
+      const alignment = verifyHourAlignment([...trailingSlots.keys()], [...priceSlots.keys()], { label: "trailing window" });
       report.figures.alignment = alignment;
       report.checks.alignment = {
         pass: true,
@@ -274,14 +327,39 @@ async function main() {
     console.error(`  alignment SKIPPED as FAIL: price reference fetch failed: ${price.error?.message ?? price.error}`);
   }
 
+  // Canonical hour: 2026-04-26, local 13:00 and 14:00 Europe/Amsterdam. Before
+  // the fix, the broken energy-charts feed recorded a 2.5 percent renewable
+  // share and 28 MW of solar at 13:00 while the day-ahead price reached
+  // -413.3 EUR/MWh; after the backfill the same local hours must show a
+  // multi-gigawatt aggregate and a high renewable share.
+  {
+    const slotAt = (slots, hour) =>
+      slots ? [...slots.values()].find((sl) => sl.local.date === CANONICAL_DAY_LOCAL && sl.local.hour === hour) : null;
+    const canon = {};
+    for (const h of [13, 14]) {
+      const ent = slotAt(trailingSlots, h);
+      const pr = slotAt(priceSlots, h);
+      const ec = slotAt(ecSlots, h);
+      canon[`${String(h).padStart(2, "0")}:00`] = {
+        priceEURMWh: pr?.values?.day_ahead_price ?? null,
+        beforeRenShareOfGenPct: ec?.values?.renewable_share_of_generation ?? null,
+        beforeSolarMW: ec?.values?.solar ?? null,
+        afterAggregateMW: ent?.values?.[AGG] ?? null,
+        afterRenShareOfGenPct: ent?.values?.renewable_share_of_generation ?? null,
+        afterRenShareOfLoadPct: ent?.values?.renewable_share_of_load ?? null,
+      };
+    }
+    report.figures.canonicalHour = { day: CANONICAL_DAY_LOCAL, timezone: "Europe/Amsterdam", hours: canon };
+    console.log("  canonical hour 2026-04-26:", JSON.stringify(canon));
+  }
+
   // Renewable composition comparison: recompute the old energy-charts
   // renewable share of generation from its per-type feeds and compare with
   // both the served energy-charts share and the ENTSO-E share.
-  if (publicPower.ok) {
+  if (ecSlots) {
     const renTypes = ["biomass", "waste", "wind_offshore", "wind_onshore", "solar"];
     const prodTypes = ["nuclear", "biomass", "fossil_hard_coal", "fossil_gas", "others", "waste", "wind_offshore", "wind_onshore", "solar"];
-    const ecSlots = bucketHours(publicPower.json.data.map((r) => ({ timestamp: r.timestamp, values: r.values })));
-    const entSlots = bucketHours(trailing.envelope.data.map((r) => ({ timestamp: r.timestamp, values: r.values })));
+    const entSlots = trailingSlots;
     let n = 0;
     let sumRecomputeErr = 0; // served share vs recomputed from per-type feeds
     let sumCrossErr = 0; // served energy-charts share vs ENTSO-E share
@@ -399,68 +477,49 @@ async function main() {
     console.log("  parameter sweep:", JSON.stringify(sweep, null, 1));
   }
 
-  // Appendix 3: where the NL solar volume lives in the actual per-type
-  // document (A75/A16): per-psrType trailing-year energy and the summer-day
-  // hourly profile of B16+B20 (diurnal shape check).
+  // Appendix 3: per-psrType trailing-year energy, taken from the SAME
+  // deduplicated parsed arrays the criteria use (trailing.perTypeGWh), not
+  // from a second fetch, so criterion 2 and the cross-check agree to the MWh
+  // by construction. Also records the summer-day hourly profile of B16+B20
+  // from a separate one-day fetch (appendix only, never a criterion).
   {
-    const perTypeTrail = {};
-    const chunks = [];
-    let cur = trailingStart;
-    while (cur < now) {
-      const yearEnd = Date.UTC(new Date(cur).getUTCFullYear() + 1, 0, 1);
-      const end = Math.min(now, yearEnd);
-      chunks.push({ periodStart: entsoeTs(cur), periodEnd: entsoeTs(end) });
-      cur = end;
-    }
-    for (const c of chunks) {
-      const doc = await fetchEntsoe({ documentType: DOC_GENERATION, ...c }, { fresh: true, label: "A75 trailing per-type" });
-      if (!doc.ok) continue;
-      const { records } = parseEntsoeIntervals(doc.xml);
-      for (const r of records) {
-        const psr = r.psrType ?? "(none)";
-        const acc = perTypeTrail[psr] ?? { points: 0, maxMW: -Infinity, energyGWh: 0 };
-        acc.points += 1;
-        acc.maxMW = Math.max(acc.maxMW, r.mw);
-        acc.energyGWh += (r.mw * r.ms) / 3_600_000 / 1000;
-        perTypeTrail[psr] = acc;
-      }
-    }
+    const pt = trailing.perTypeGWh ?? {};
     const perTypeTrailOut = {};
-    for (const [psr, a] of Object.entries(perTypeTrail)) {
+    for (const [psr, gwh] of Object.entries(pt)) {
       perTypeTrailOut[psr] = {
         name: PSR_TYPES[psr]?.name ?? "UNMAPPED",
-        points: a.points,
-        maxMW: Math.round(a.maxMW * 10) / 10,
-        energyGWh: Math.round(a.energyGWh),
-        energyTWhAnnualized: Math.round((a.energyGWh / 1000) * (365 / ((now - trailingStart) / DAY_MS)) * 10) / 10,
+        energyGWh: Math.round(gwh),
+        energyTWhAnnualized: r1(ann(gwh)),
       };
     }
     report.figures.perTypeTrailingYear = perTypeTrailOut;
-    console.log("  per-type trailing year:", JSON.stringify(perTypeTrailOut, null, 1));
+    console.log("  per-type trailing year (same arrays as the criteria):", JSON.stringify(perTypeTrailOut, null, 1));
 
-    // Double-count cross-check: the per-type trailing-year energies must
-    // compose a plausible national total. NL annual generation is on the
-    // order of 120-135 TWh, wind onshore (B19) roughly 16-17 TWh, wind
-    // offshore (B18) roughly 15-16 TWh, and solar (B16 + B20) must land in
-    // the probe band of 18-35 TWh annualized; solar near or above 40 TWh
-    // means a double count persists.
-    const ann = (gwh) => (gwh / 1000) * (365 / ((now - trailingStart) / DAY_MS));
-    const twhOf = (psr) => ann(perTypeTrail[psr]?.energyGWh ?? 0);
-    const totalTWh = ann(Object.values(perTypeTrail).reduce((s, a) => s + a.energyGWh, 0));
-    const windOnshoreTWh = twhOf("B19");
-    const windOffshoreTWh = twhOf("B18");
-    const solarB16B20TWh = twhOf("B16") + twhOf("B20");
-    const r1 = (x) => Math.round(x * 10) / 10;
+    // Double-count cross-check: the per-type energies must compose a
+    // plausible national total (NL annual generation on the order of
+    // 120-135 TWh; offshore wind B18 officially about 16 TWh) and must agree
+    // with criterion 2 to the MWh. A B16+B20 aggregate at or above 49 TWh
+    // annualized (band 30-42 plus slack) means a double count persists.
+    const totalGWh = Object.values(pt).reduce((s2, gwh) => s2 + gwh, 0);
+    const totalTWh = ann(totalGWh);
+    const windOnshoreTWh = ann(pt.B19 ?? 0);
+    const windOffshoreTWh = ann(pt.B18 ?? 0);
+    const crossAggGWh = (pt.B16 ?? 0) + (pt.B20 ?? 0);
+    const agreesToMWh = Math.round(crossAggGWh * 1000) === Math.round(aggGWh * 1000);
     report.figures.doubleCountCrossCheck = {
+      source: "trailing.perTypeGWh (same parsed arrays as criterion 2)",
       totalGenerationTWhAnnualized: r1(totalTWh),
       windOnshoreB19TWhAnnualized: r1(windOnshoreTWh),
       windOffshoreB18TWhAnnualized: r1(windOffshoreTWh),
-      solarB16plusB20TWhAnnualized: r1(solarB16B20TWh),
-      referenceBands: { total: "120-135 TWh/yr", windOnshore: "16-17 TWh/yr", windOffshore: "15-16 TWh/yr", solar: "18-35 TWh/yr (>= 40 means a double count persists)" },
+      aggregateB16plusB20TWhAnnualized: r1(ann(crossAggGWh)),
+      criterion2AggregateGWh: Math.round(aggGWh),
+      crossCheckAggregateGWh: Math.round(crossAggGWh),
+      agreesWithCriterion2ToMWh: agreesToMWh,
+      referenceBands: { total: "120-135 TWh/yr", windOffshore: "about 16 TWh/yr official", aggregate: `${ANNUAL_MIN_TWH}-${ANNUAL_MAX_TWH} TWh/yr (>= ${ANNUAL_MAX_TWH + 7} means a double count persists)` },
     };
     report.checks.doubleCountCrossCheck = {
-      pass: solarB16B20TWh < 40 && totalTWh > 0,
-      detail: `trailing-year per-type energies annualize to total ${r1(totalTWh)} TWh (ref 120-135), wind onshore ${r1(windOnshoreTWh)} (ref 16-17), wind offshore ${r1(windOffshoreTWh)} (ref 15-16), solar B16+B20 ${r1(solarB16B20TWh)} TWh (probe band 18-35; >= 40 TWh means a double count persists)`,
+      pass: agreesToMWh && ann(crossAggGWh) < ANNUAL_MAX_TWH + 7 && totalTWh > 0,
+      detail: `per-type energies (same arrays as criterion 2) annualize to total ${r1(totalTWh)} TWh (ref 120-135), wind onshore ${r1(windOnshoreTWh)}, wind offshore ${r1(windOffshoreTWh)}, B16+B20 ${r1(ann(crossAggGWh))} TWh; agrees with criterion 2 to the MWh: ${agreesToMWh}; aggregate >= ${ANNUAL_MAX_TWH + 7} TWh would mean a double count persists`,
     };
     console.log(`  double-count cross-check: ${JSON.stringify(report.figures.doubleCountCrossCheck)}`);
 

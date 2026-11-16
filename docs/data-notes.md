@@ -191,30 +191,48 @@ other zone keeps its energy-charts feed.
   spring-forward day has none) and every build verifies the conversion hour-by-hour against the
   unchanged energy-charts price series (`verifyHourAlignment`): every ENTSO-E hour key must exist in
   the price series; price-only hours are a publication lag, not an error.
-- psrType → site series mapping (`PSR_TYPES` in `scripts/lib-entsoe.mjs`): B16 Solar → `solar`,
+- psrType → site series mapping (`PSR_TYPES` in `scripts/lib-entsoe.mjs`): B16 Solar and B20 Other
+  renewable → `distribution_renewables` (one aggregate series; see the composition decision below),
   B19 Wind Onshore → `wind_onshore`, B18 Wind Offshore → `wind_offshore`, B01 Biomass → `biomass`,
   B17 Waste → `waste`, B14 Nuclear → `nuclear`, B02/B05 → `fossil_hard_coal`, B03/B04 → `fossil_gas`,
-  everything else (hydro B10/B11/B12, geothermal B09, marine B13, oil/peat, other B15/B20, unknown) →
-  `others`. The emission-factor table is keyed by energy-charts series ids and is unchanged.
-- Renewable set, computed explicitly from the A69 per-type series: Solar, Wind Onshore, Wind Offshore,
-  Biomass, Hydro Run-of-river and poundage, Hydro Water Reservoir, Hydro Pumped Storage (generation
-  side only — A69 is generation), Geothermal, Waste (psrTypes B16, B19, B18, B01, B11, B12, B10, B09, B17).
+  everything else (hydro B10/B11/B12, geothermal B09, marine B13, oil/peat, other B15, unknown) →
+  `others`. The emission-factor table is keyed by site series ids; `distribution_renewables` carries the
+  solar PV median factor (46 g CO2-eq/kWh), the same value the old `solar` key carried.
+- Composition decision (product owner, 2026-11-16): for the NL zone the TSO reports solar plus other
+  distribution-connected renewables as a single upscaled estimate under B20, while B16 carries only the
+  small directly measured share; the missing onshore wind volume and the B20 excess are the same volume
+  (B19 annualizes low against the official onshore figure while B16+B20 runs high against the official
+  solar figure, and the implied renewable total matches). The site ships the aggregate as
+  `distribution_renewables`, honestly labeled, and never decomposes it; every component is renewable, so
+  the renewable share is unaffected.
+- Renewable set, computed explicitly from the A75 per-type series via the per-psrType renewable flags:
+  B16+B20 distribution-connected renewables, Wind Onshore, Wind Offshore, Biomass, Hydro Run-of-river and
+  poundage, Hydro Water Reservoir, Hydro Pumped Storage (generation side), Geothermal, Waste (psrTypes
+  B16, B20, B19, B18, B01, B11, B12, B10, B09, B17).
 - Composition check against the old feed (recomputed from the cached energy-charts per-type feeds,
   2025, PT15M): `renewable_share_of_generation` ≈ (biomass + waste + wind_onshore + wind_offshore +
   solar) / total generation, mean absolute difference about 1.3 percentage points (the served share is
   not exactly reproducible from the per-type feeds; the site keeps the served definition's composition,
   and the ENTSO-E renewable set above matches it — hydro/geothermal for NL sit inside energy-charts'
   `others`, which the served share does not count as renewable). Residual load =
-  `load − wind_onshore − wind_offshore − solar` (mean absolute difference 0.04 MW on the 2025 cache).
+  `load − wind_onshore − wind_offshore − distribution_renewables` (mean absolute difference 0.04 MW on
+  the 2025 cache).
   `renewable_share_of_load` ≈ (same renewable sum) / load; the daily score share for NL is the mean of
   the hourly shares per Amsterdam-local day, matching the energy-charts `ren_share_daily_avg` definition
   used by the other 35 zones (mean absolute difference 0.57 points on the 49 comparable days).
-- Probe gate (`scripts/probe-entsoe.mjs`, run in Actions with the secret; figures recorded in the PR
-  description): summer midday solar peak in the multi-GW range consistent with the installed fleet,
-  trailing-window solar annualized in a plausible band around the CBS-reported ~25 TWh/yr, and summer
-  solar above winter solar. If any criterion fails, the backfill does not run. A one-off cross-zone
-  solar audit (`scripts/audit-zones.mjs`, energy-charts only) checks all 36 score zones' observed solar
-  peak on 2026-06-15 as a share of installed solar AC capacity; the pre-fix NL shows about 1 percent.
+- Probe gate (`scripts/probe-entsoe.mjs`, run in Actions with the secret; full report recorded in the PR
+  description). All criteria are computed from one deduplicated trailing-year A75/A65 series; the
+  2026-06-15 and 2026-01-15 sample days are extracted from it: (1) the aggregate's peak in the summer
+  sample day's local midday window (10:00-15:00) must be at least 10 percent of the daylight-connected
+  fleet, solar AC 29.28 GW plus onshore wind 7.18 GW = 36.46 GW (energy-charts installed_power, latest
+  record), expected 30-45 percent; (2) the B16+B20 aggregate must annualize to 30-42 TWh/yr (official
+  solar 25.5 plus official onshore wind 16.4, with slack for the window offset); (3) diurnality: the
+  trailing-year mean of the aggregate over local midday hours (10:00-15:00) must be at least 3 times its
+  mean over local night hours (00:00-05:00), expected about 4-5; plus the hour-alignment check and a
+  double-count cross-check that must agree with criterion 2 to the MWh. If any criterion fails, the
+  backfill does not run. A one-off cross-zone solar audit (`scripts/audit-zones.mjs`, energy-charts
+  only) checks all 36 score zones' observed solar peak on 2026-06-15 as a share of installed solar AC
+  capacity; the pre-fix NL shows about 1 percent.
 
 ## Snapshot data contract
 

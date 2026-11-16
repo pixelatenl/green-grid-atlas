@@ -152,7 +152,7 @@ export function daysToTrailing(days) {
     const windMW = d.slots.map((s) =>
       roundForStorage(((s.values.wind_onshore ?? 0) + (s.values.wind_offshore ?? 0)) || null, 0),
     );
-    const solarMW = d.slots.map((s) => roundForStorage(s.values.solar ?? null, 0));
+    const distributionRenewablesMW = d.slots.map((s) => roundForStorage(s.values.distribution_renewables ?? null, 0));
     const flows = Object.fromEntries(
       FLOW_SERIES.map((n) => [n, d.slots.map((s) => roundForStorage(s.values[n] ?? null, 2))]),
     );
@@ -174,7 +174,7 @@ export function daysToTrailing(days) {
       residual,
       netImport,
       windMW,
-      solarMW,
+      distributionRenewablesMW,
       flows,
       weather,
     };
@@ -315,8 +315,10 @@ export function samplesFromDays(days) {
           Object.fromEntries(PRODUCTION_TYPES.map((t) => [t, slot.values[t] ?? null])),
           slot.values.load ?? null,
         ),
-        windSolarMW:
-          (slot.values.wind_onshore ?? 0) + (slot.values.wind_offshore ?? 0) + (slot.values.solar ?? 0),
+        windRenewablesMW:
+          (slot.values.wind_onshore ?? 0) +
+          (slot.values.wind_offshore ?? 0) +
+          (slot.values.distribution_renewables ?? 0),
         load: slot.values.load ?? null,
         mix: Object.fromEntries(PRODUCTION_TYPES.map((t) => [t, slot.values[t] ?? null])),
       });
@@ -348,8 +350,8 @@ export function riskFromSamples(samples, windowResult) {
     ? usable.filter((s) => isRedHour(s.price, s.renShareGen, pct)).length / usable.length
     : null;
   return computeRiskIndicators(
-    s30.map((s) => ({ price: s.price, renShareGen: s.renShareGen, load: s.load, netImportGW: s.netImport, windSolarMW: s.windSolarMW })),
-    s90.map((s) => ({ price: s.price, renShareGen: s.renShareGen, load: s.load, netImportGW: s.netImport, windSolarMW: s.windSolarMW })),
+    s30.map((s) => ({ price: s.price, renShareGen: s.renShareGen, load: s.load, netImportGW: s.netImport, windRenewablesMW: s.windRenewablesMW })),
+    s90.map((s) => ({ price: s.price, renShareGen: s.renShareGen, load: s.load, netImportGW: s.netImport, windRenewablesMW: s.windRenewablesMW })),
     redShare,
   );
 }
@@ -358,7 +360,7 @@ export function riskFromSamples(samples, windowResult) {
 export function profilesFromSamples(samples, daysBack = 30) {
   const now = samples.length ? samples[samples.length - 1].utc : 0;
   const inWindow = samples.filter((s) => s.utc >= now - daysBack * 86_400_000);
-  const keys = ["price", "ren", "intensity", "load", "netImport", "fossil_gas", "solar", "wind", "residual"];
+  const keys = ["price", "ren", "intensity", "load", "netImport", "fossil_gas", "distribution_renewables", "wind", "residual"];
   const sums = Object.fromEntries(keys.map((k) => [k, Array(24).fill(0)]));
   const counts = Object.fromEntries(keys.map((k) => [k, Array(24).fill(0)]));
   for (const s of inWindow) {
@@ -370,7 +372,7 @@ export function profilesFromSamples(samples, daysBack = 30) {
       load: s.load,
       netImport: s.netImport,
       fossil_gas: s.mix?.fossil_gas ?? null,
-      solar: s.mix?.solar ?? null,
+      distribution_renewables: s.mix?.distribution_renewables ?? null,
       wind: (s.mix?.wind_onshore ?? 0) + (s.mix?.wind_offshore ?? 0),
       residual: s.residualLoad,
     };

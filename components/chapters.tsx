@@ -5,8 +5,8 @@ import { AiInsight } from "@/components/ai-insight";
 import { WINDOW_PARAMS } from "@/grid/green-window";
 
 /*
-  The four chapters: the morning gas ramp, the solar valley, the evening
-  peak, the wind night. Each is a derived headline sentence (every figure
+  The four chapters: the morning gas ramp, the daylight renewables valley,
+  the evening peak, the wind night. Each is a derived headline sentence (every figure
   computed at render time from the snapshot's trailing-30-day average day
   profiles) plus its evidence visual — a 24-hour profile chart, pure SVG,
   bars keyboard-focusable with per-bar labels.
@@ -151,7 +151,7 @@ function Chapter({
 export function Chapters() {
   const gasPeak = argExtreme("fossil_gas", "max");
   const gasMin = argExtreme("fossil_gas", "min");
-  const solarPeak = argExtreme("solar", "max");
+  const daylightRenewablesPeak = argExtreme("distribution_renewables", "max");
   const priceMin = argExtreme("price", "min");
   const priceMax = argExtreme("price", "max");
   const loadPeak = argExtreme("load", "max");
@@ -188,20 +188,20 @@ export function Chapters() {
 
       <Chapter
         id="solarValley"
-        title="The solar valley"
-        description="Midday solar floods the grid, prices sag, and the green window opens."
+        title="The daylight renewables valley"
+        description="Midday distribution-connected renewables flood the grid, prices sag, and the green window opens."
         headline={
           <>
-            Solar peaks at <span className="tabular-nums">{formatNumber(solarPeak.value, 0)} MW</span> around{" "}
-            {hh(solarPeak.hour)}, and the average day-ahead price bottoms at{" "}
+            Daylight renewables peak at <span className="tabular-nums">{formatNumber(daylightRenewablesPeak.value, 0)} MW</span> around{" "}
+            {hh(daylightRenewablesPeak.hour)}, and the average day-ahead price bottoms at{" "}
             <span className="tabular-nums">{formatNumber(priceMin.value, 1)} EUR/MWh</span> at {hh(priceMin.hour)} —
             the heart of the green window.
           </>
         }
       >
         <DayProfile
-          series={profiles.solar ?? []}
-          seriesLabel="Solar production"
+          series={profiles.distribution_renewables ?? []}
+          seriesLabel="Distribution-connected renewables"
           seriesUnit="MW"
           overlay={profiles.price ?? []}
           overlayLabel="Day-ahead price"

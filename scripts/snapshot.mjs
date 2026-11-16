@@ -84,7 +84,10 @@ function samplesFromStoredTrailing(trailing) {
         renShareGen: day.ren?.[i] ?? null,
         intensity: day.intensity?.[i] ?? null,
         load: day.load?.[i] ?? null,
-        windSolarMW: day.windMW != null || day.solarMW != null ? (day.windMW?.[i] ?? 0) + (day.solarMW?.[i] ?? 0) : null,
+        windRenewablesMW:
+          day.windMW != null || day.distributionRenewablesMW != null
+            ? (day.windMW?.[i] ?? 0) + (day.distributionRenewablesMW?.[i] ?? 0)
+            : null,
         mix: null,
       });
     });

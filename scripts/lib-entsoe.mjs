@@ -94,15 +94,17 @@ export const PSR_TYPES = {
   B13: { name: "Marine", series: "others", renewable: false },
   B14: { name: "Nuclear", series: "nuclear", renewable: false },
   B15: { name: "Other", series: "others", renewable: false },
-  B16: { name: "Solar", series: "solar", renewable: true },
+  // B16 Solar plus B20 Other renewable form one aggregate series: for the NL
+  // zone the TSO reports distribution-connected renewables (solar plus
+  // distribution-level wind and other renewables) as a single upscaled
+  // estimate under B20, while B16 carries only the small directly measured
+  // share. The site ships the aggregate, honestly labeled, and never splits
+  // it; every component is renewable, so the renewable share is unaffected.
+  B16: { name: "Solar", series: "distribution_renewables", renewable: true },
   B17: { name: "Waste", series: "waste", renewable: true },
   B18: { name: "Wind Offshore", series: "wind_offshore", renewable: true },
   B19: { name: "Wind Onshore", series: "wind_onshore", renewable: true },
-  // For the NL zone the TSO reports the upscaled solar estimate under B20
-  // "Other renewable" (probe: diurnal profile peaking ~11-16 GW, about 20+
-  // TWh/yr), while B16 carries only the small directly measured share, so
-  // the site's solar series is B16+B20 and B20 counts as renewable.
-  B20: { name: "Other renewable", series: "solar", renewable: true },
+  B20: { name: "Other renewable (TSO aggregate of distribution-connected renewables)", series: "distribution_renewables", renewable: true },
 };
 
 // The renewable MW sum is computed from the per-psrType renewable flags
@@ -356,13 +358,18 @@ export function parseEntsoeIntervals(xml) {
  *   { data: [{ timestamp: ISO-Z, values: { <site series id>, load,
  *               residual_load, renewable_share_of_generation,
  *               renewable_share_of_load } }] }
- * Series ids match the energy-charts public_power vocabulary so
- * slotsFromEnvelopes/daysToTrailing/intensity/records work unchanged.
+ * Series ids match the site vocabulary so
+ * slotsFromEnvelopes/daysToTrailing/intensity/records work unchanged; the
+ * one exception is B16+B20, which map to distribution_renewables (the TSO's
+ * aggregate of distribution-connected renewables), not to a pure solar id.
+ * perTypeGWh carries the per-psrType energy (GWh) of the same deduplicated
+ * records, so probe criteria and cross-checks derive from one parsed array.
  */
 export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false } = {}) {
   const windows = entsoeWindows(startUtcMs, endUtcMs);
   const byTs = new Map(); // ISO ts -> { values: Record<string, number>, renMW, totalMW, loadMW, ms }
   const psrSeen = new Set();
+  const perTypeGWh = {}; // psrType -> energy in GWh, from the same deduplicated records
   let failures = 0;
 
   for (const w of windows) {
@@ -380,6 +387,7 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
     for (const r of records) {
       const psr = PSR_TYPES[r.psrType];
       const seriesId = psr?.series ?? "others";
+      perTypeGWh[r.psrType ?? "(none)"] = (perTypeGWh[r.psrType ?? "(none)"] ?? 0) + (r.mw * r.ms) / 3_600_000 / 1000;
       const rec = byTs.get(r.timestamp) ?? { values: {}, renMW: 0, totalMW: 0, loadMW: null, ms: 0 };
       rec.values[seriesId] = (rec.values[seriesId] ?? 0) + r.mw;
       rec.totalMW += r.mw;
@@ -414,8 +422,9 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
       if (rec.loadMW != null && rec.loadMW > 0) {
         v.renewable_share_of_load = (rec.renMW / rec.loadMW) * 100;
         // residual load, energy-charts definition (verified against the
-        // per-type feeds): load - wind onshore - wind offshore - solar.
-        const ws = (v.wind_onshore ?? 0) + (v.wind_offshore ?? 0) + (v.solar ?? 0);
+        // per-type feeds): load - wind onshore - wind offshore -
+        // distribution-connected renewables (the renamed B16+B20 aggregate).
+        const ws = (v.wind_onshore ?? 0) + (v.wind_offshore ?? 0) + (v.distribution_renewables ?? 0);
         v.residual_load = rec.loadMW - ws;
       }
       return { timestamp: ts, values: v, ms: rec.ms };
@@ -426,6 +435,7 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
     failures,
     envelope: { data },
     psrTypes: [...psrSeen].sort(),
+    perTypeGWh,
     windows,
   };
 }

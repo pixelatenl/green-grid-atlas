@@ -8,11 +8,11 @@ import { WINDOW_RULE_TEXT, WINDOW_PARAMS } from "@/grid/green-window";
   ENTSOE_API_TOKEN secret; full report recorded in the pull request
   description). Each figure names its source inline where it is used.
 */
-const PROBE_SUMMER_PEAK_GW = "…"; // ENTSO-E A69, 2026-06-15 midday peak, GW
-const PROBE_PEAK_SHARE = "…"; // peak as % of installed solar AC fleet
-const PROBE_FLEET_GW = "…"; // energy-charts installed_power, latest solar_ac record, GW
-const PROBE_TRAILING_TWH = "…"; // ENTSO-E A69 trailing-window solar, annualized TWh/yr
-const PROBE_SEASON_RATIO = "…"; // ENTSO-E A69 summer-day / winter-day solar energy
+const PROBE_PEAK_GW = "…"; // ENTSO-E A75/A16 aggregate peak, 2026-06-15 local midday, GW
+const PROBE_PEAK_SHARE_PCT = "…"; // peak as % of the daylight-connected fleet
+const PROBE_DAYLIGHT_FLEET_GW = "…"; // energy-charts installed_power latest record: solar_ac + wind_onshore, GW
+const PROBE_ANNUAL_TWH = "…"; // ENTSO-E B16+B20 trailing-year aggregate, annualized TWh/yr
+const PROBE_DIURNAL_RATIO = "…"; // trailing-year local midday mean / night mean of the aggregate
 
 /*
   The Method and sources drawer, seated in the family footer's extra slot.
@@ -107,24 +107,29 @@ export function MethodDrawer() {
               ENTSO-E timestamps are UTC interval starts; the pipeline converts them explicitly to
               Europe/Amsterdam local time through the same slot keying as every other series, and every build
               verifies the conversion hour-by-hour against the unchanged energy-charts price series. Renewable
-              shares are computed from the per-type feeds: the renewable set is solar, wind onshore, wind
-              offshore, biomass, hydro run-of-river and poundage, hydro water reservoir, hydro pumped storage
-              (generation side), geothermal and waste, over total generation for the share of generation and
-              over actual load for the share of load. TSO-reported solar is an upscaled estimate, not a census
-              of every installation: the probe recorded a summer midday peak of{" "}
-              {PROBE_SUMMER_PEAK_GW} GW, about {PROBE_PEAK_SHARE}% of the{" "}
-              {PROBE_FLEET_GW} GW installed solar AC fleet (energy-charts installed_power, latest record),
-              which is the expected shape for an upscaled TSO estimate.
+              shares are computed from the per-type feeds: the renewable set is distribution-connected renewables
+              (psrType B16 Solar plus B20 Other renewable), wind onshore, wind offshore, biomass, hydro
+              run-of-river and poundage, hydro water reservoir, hydro pumped storage (generation side),
+              geothermal and waste, over total generation for the share of generation and over actual load for
+              the share of load.
+            </p>
+            <p className="mt-1">
+              Dutch solar and other distribution-connected renewables are reported by the TSO as a single
+              upscaled estimate (ENTSO-E psrType B20 Other renewable plus B16 Solar); the site presents that
+              aggregate rather than a decomposition, and the renewable share is unaffected because every
+              component is renewable. The probe gate recorded an aggregate peak of {PROBE_PEAK_GW} GW on the
+              2026-06-15 midday window, about {PROBE_PEAK_SHARE_PCT}% of the {PROBE_DAYLIGHT_FLEET_GW} GW
+              daylight-connected fleet (energy-charts installed_power, latest record: solar AC plus onshore
+              wind), an annualized aggregate of {PROBE_ANNUAL_TWH} TWh per year, and a midday-to-night mean
+              ratio of {PROBE_DIURNAL_RATIO} across the trailing year.
             </p>
             <p className="mt-1">
               Historical note: the energy-charts NL solar series was defective (detected November 2026). It
               yielded about 0.48 TWh of solar per year against a 29.28 GW installed fleet (the same source's
               installed_power endpoint), while CBS reports 25.52 billion kWh of Dutch solar production in 2025
               (provisional). Fixed in November 2026 by switching NL generation and load to ENTSO-E per-type
-              data. Probe gate figures at the switch: summer midday solar peak {PROBE_SUMMER_PEAK_GW} GW,{" "}
-              trailing-window solar annualized at {PROBE_TRAILING_TWH} TWh per year, and a summer-to-winter
-              sample-day solar ratio of {PROBE_SEASON_RATIO}. The full probe report and the cross-zone solar
-              audit are recorded in the pull request description.
+              data. The full probe report and the cross-zone solar audit are recorded in the pull request
+              description.
             </p>
           </section>
         )}

@@ -125,15 +125,15 @@ export function buildContexts(snap: NarrationSnapshot): Record<NarratedVisual, N
       },
     },
     solarValley: {
-      title: "The solar valley",
+      title: "The daylight renewables valley",
       shows:
-        "The trailing-30-day average day profile of solar production and price: midday solar pushes prices down, opening the green window.",
+        "The trailing-30-day average day profile of distribution-connected renewables and price: the midday daylight-renewables peak pushes prices down, opening the green window.",
       figures: {
-        solarPeakMW: fmt(pf.maxOf("solar").value, 0),
-        solarPeakHour: `${String(pf.maxOf("solar").hour).padStart(2, "0")}:00`,
+        daylightRenewablesPeakMW: fmt(pf.maxOf("distribution_renewables").value, 0),
+        daylightRenewablesPeakHour: `${String(pf.maxOf("distribution_renewables").hour).padStart(2, "0")}:00`,
         priceValley_EUR_MWh: fmt(pf.minOf("price").value, 1),
         priceValleyHour: `${String(pf.minOf("price").hour).padStart(2, "0")}:00`,
-        renAtSolarPeak_pct: fmt(pf.at("ren", pf.maxOf("solar").hour), 1),
+        renAtDaylightPeak_pct: fmt(pf.at("ren", pf.maxOf("distribution_renewables").hour), 1),
         greenBand: gb ? formatBand(gb) : "none",
       },
     },
