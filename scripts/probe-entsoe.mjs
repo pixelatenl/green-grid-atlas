@@ -528,6 +528,20 @@ async function main() {
         report.figures.b16b20Samples = samples;
         console.log("  B16/B20 samples per UTC hour:", JSON.stringify(samples));
 
+        // Exact-timestamp duplicate values for a few midday slots.
+        const exact = {};
+        {
+          const { records } = parseEntsoeIntervals(doc.xml);
+          for (const ts of ["2026-06-15T12:00:00.000Z", "2026-06-15T13:00:00.000Z", "2026-06-15T14:00:00.000Z", "2026-06-15T02:00:00.000Z"]) {
+            for (const psr of ["B16", "B20", "B04"]) {
+              const vals = records.filter((r) => r.psrType === psr && r.timestamp === ts).map((r) => Math.round(r.mw * 100) / 100);
+              if (vals.length) exact[`${psr}@${ts}`] = vals;
+            }
+          }
+        }
+        report.figures.exactDuplicates = exact;
+        console.log("  exact-timestamp duplicate values:", JSON.stringify(exact));
+
         // Raw XML of the B16 and B20 TimeSeries segments (response bodies
         // never contain the token).
         const xmlStr = String(doc.xml ?? "");
