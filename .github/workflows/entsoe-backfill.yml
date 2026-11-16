@@ -1,23 +1,26 @@
 name: ENTSO-E NL probe and one-off backfill
 
-# One-off gate and backfill for the ENTSO-E NL substitution. NEVER
-# scheduled and never part of PR CI (workflow_dispatch only). Run on the
-# feature branch:
+# Probe gate and one-off backfill for the ENTSO-E NL substitution. NEVER
+# scheduled. Two ways in:
 #
-#   mode=probe    — runs the probe gate (scripts/probe-entsoe.mjs) with the
-#                   ENTSOE_API_TOKEN secret and prints the full report to
-#                   the job log; figures are recorded in the PR description.
-#   mode=backfill — runs the probe gate first and, only if every acceptance
-#                   criterion passes, runs the one-off backfill
-#                   (scripts/backfill.mjs, full 2015-present history, which
-#                   includes the trailing window) and commits the rebuilt
-#                   public/data/snapshot.json to this branch.
+#   - pull_request (opened/synchronize/labeled) against main: runs the
+#     probe gate (scripts/probe-entsoe.mjs) with the ENTSOE_API_TOKEN secret
+#     and prints the full report to the job log; the figures are recorded in
+#     the PR description. If any acceptance criterion fails, this check fails.
+#   - labeling the PR "entsoe-backfill" (or workflow_dispatch with
+#     mode=backfill once the file is on the default branch): runs the probe
+#     gate first and, only if every criterion passes, runs the one-off
+#     backfill (scripts/backfill.mjs, full 2015-present history, which
+#     includes the trailing window) and commits the rebuilt
+#     public/data/snapshot.json to the PR head branch.
 #
-# If any probe criterion fails, the backfill does not run and the figures
-# are reported in the PR description instead. The token is read only from
-# the ENTSOE_API_TOKEN secret and is never logged, echoed or committed.
+# If any probe criterion fails, the backfill does not run and the figures are
+# reported in the PR description instead. The token is read only from the
+# ENTSOE_API_TOKEN secret and is never logged, echoed or committed.
 
 on:
+  pull_request:
+    types: [opened, synchronize, labeled]
   workflow_dispatch:
     inputs:
       mode:
@@ -33,7 +36,10 @@ permissions:
   contents: write
 
 jobs:
-  entsoe:
+  probe:
+    if: >
+      github.event_name == 'workflow_dispatch' && inputs.mode == 'probe'
+      || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -47,14 +53,28 @@ jobs:
         run: node --experimental-strip-types scripts/probe-entsoe.mjs
         env:
           ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
+  backfill:
+    needs: probe
+    if: >
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'backfill')
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'entsoe-backfill'))
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - name: One-off backfill from ENTSO-E NL data
-        if: inputs.mode == 'backfill' && steps.probe.outcome == 'success'
         run: node --experimental-strip-types scripts/backfill.mjs
         env:
           ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-      - name: Commit rebuilt snapshot if changed
-        if: inputs.mode == 'backfill' && steps.probe.outcome == 'success'
+      - name: Commit rebuilt snapshot to the PR head branch
         run: |
           git config user.name "green-grid-snapshot-bot"
           git config user.email "actions@github.com"
