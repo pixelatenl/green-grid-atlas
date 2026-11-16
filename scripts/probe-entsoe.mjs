@@ -323,36 +323,58 @@ async function main() {
     console.log("  as-specified A69/A01 appendix:", JSON.stringify(asSpec));
   }
 
-  // Appendix 2: document/process matrix for the summer sample day, to map
-  // which ENTSO-E document carries the per-type actual generation and where
-  // the NL solar volume actually lives. Recorded for the PR description.
+  // Appendix 2: document/process and domain-parameter sweep for the summer
+  // sample day, to map which combination returns one clean series per type.
   {
-    const matrix = {};
-    for (const [doc, proc] of [
-      ["A69", "A01"], ["A69", "A16"], ["A71", "A01"], ["A74", "A01"], ["A74", "A16"], ["A75", "A01"], ["A75", "A16"],
-    ]) {
-      const r = await fetchEntsoe(
-        { documentType: doc, processType: proc, periodStart: entsoeTs(SUMMER_DAY), periodEnd: entsoeTs(SUMMER_DAY + DAY_MS) },
-        { fresh: true, label: `matrix ${doc}/${proc}` },
-      );
+    const sweep = {};
+    const variants = [
+      ["A75", "A16", "in_Domain"],
+      ["A75", "A16", "outBiddingZone_Domain"],
+      ["A75", "A16", "inBiddingZone_Domain"],
+      ["A75", "A16", "biddingZone_Domain"],
+      ["A69", "A01", "in_Domain"],
+      ["A69", "A01", "outBiddingZone_Domain"],
+      ["A74", "A16", "in_Domain"],
+      ["A74", "A16", "outBiddingZone_Domain"],
+    ];
+    for (const [doc, proc, domainParam] of variants) {
+      const u = new URL("https://web-api.tp.entsoe.eu/api");
+      u.searchParams.set("securityToken", process.env.ENTSOE_API_TOKEN ?? "");
+      u.searchParams.set("documentType", doc);
+      u.searchParams.set("processType", proc);
+      u.searchParams.set(domainParam, "10YNL----------L");
+      u.searchParams.set("periodStart", entsoeTs(SUMMER_DAY));
+      u.searchParams.set("periodEnd", entsoeTs(SUMMER_DAY + DAY_MS));
+      const r = await fetch(u, { headers: { Accept: "application/xml" }, signal: AbortSignal.timeout(120_000) });
       if (!r.ok) {
-        matrix[`${doc}/${proc}`] = { error: String(r.error?.message ?? r.error).slice(0, 120) };
+        sweep[`${doc}/${proc}/${domainParam}`] = { status: r.status };
         continue;
       }
-      const { records, psrTypes } = parseEntsoeIntervals(r.xml);
-      const solar = records.filter((x) => x.psrType === "B16");
-      const midday = solar.filter((x) => new Date(x.timestamp).getUTCHours() >= 10 && new Date(x.timestamp).getUTCHours() < 15);
-      matrix[`${doc}/${proc}`] = {
+      const { records, psrTypes } = parseEntsoeIntervals(await r.text());
+      const perPsr = {};
+      for (const rec of records) {
+        const psr = rec.psrType ?? "(none)";
+        const a = perPsr[psr] ?? { n: 0, max: -Infinity };
+        a.n += 1;
+        a.max = Math.max(a.max, rec.mw);
+        perPsr[psr] = a;
+      }
+      const solar = records.filter((x) => x.psrType === "B16" || x.psrType === "B20");
+      const midday = solar.filter((x) => {
+        const h = new Date(x.timestamp).getUTCHours();
+        return h >= 10 && h < 15;
+      });
+      sweep[`${doc}/${proc}/${domainParam}`] = {
+        status: r.status,
         psrTypes,
-        points: records.length,
-        solarPoints: solar.length,
-        solarMaxMW: solar.length ? Math.round(Math.max(...solar.map((x) => x.mw)) * 10) / 10 : null,
-        solarMiddayMaxMW: midday.length ? Math.round(Math.max(...midday.map((x) => x.mw)) * 10) / 10 : null,
-        solarGWh: Math.round(solar.reduce((s, x) => s + (x.mw * x.ms) / 3_600_000 / 1000, 0)),
+        seriesCount: psrTypes.length,
+        recordsPerPsr: Object.fromEntries(Object.entries(perPsr).map(([k, v]) => [k, v.n])),
+        b16b20MaxMW: midday.length ? Math.round(Math.max(...midday.map((x) => x.mw)) * 10) / 10 : null,
+        b16b20DayGWh: Math.round(solar.reduce((s2, x) => s2 + (x.mw * x.ms) / 3_600_000 / 1000, 0)),
       };
     }
-    report.figures.documentMatrix = matrix;
-    console.log("  document matrix:", JSON.stringify(matrix, null, 1));
+    report.figures.paramSweep = sweep;
+    console.log("  parameter sweep:", JSON.stringify(sweep, null, 1));
   }
 
   // Appendix 3: where the NL solar volume lives in the actual per-type
