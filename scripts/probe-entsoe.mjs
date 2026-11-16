@@ -34,8 +34,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   fetchNlPowerEnvelope,
+  fetchEntsoe,
+  parseEntsoeIntervals,
   verifyHourAlignment,
   PSR_TYPES,
+  DOC_GENERATION,
+  entsoeTs,
 } from "./lib-entsoe.mjs";
 import { ecUrl, fetchJsonPaced } from "./lib-fetch.mjs";
 import { bucketHours } from "../src/grid/hourly.ts";
@@ -95,6 +99,61 @@ async function main() {
   report.figures.psrTypesSeen = trailing.psrTypes.map((c) => `${c} (${PSR_TYPES[c]?.name ?? "UNMAPPED"})`);
 
   const solarRecords = (env) => env.envelope.data.filter((r) => r.values.solar != null);
+
+  // Per-psrType detail of the summer-day A69 document, plus an alternative
+  // query shape (inBiddingZone_Domain) to compare what the API returns.
+  const perType = {};
+  {
+    const w = { periodStart: entsoeTs(SUMMER_DAY), periodEnd: entsoeTs(SUMMER_DAY + DAY_MS) };
+    const raw = await fetchEntsoe({ documentType: DOC_GENERATION, ...w }, { fresh: true, label: "A69 detail summer" });
+    if (raw.ok) {
+      const { records } = parseEntsoeIntervals(raw.xml);
+      const byPsr = new Map();
+      for (const r of records) {
+        const acc = byPsr.get(r.psrType ?? "(none)") ?? { points: 0, maxMW: -Infinity, energyGWh: 0, first: r.timestamp, last: r.timestamp, res: new Set() };
+        acc.points += 1;
+        acc.maxMW = Math.max(acc.maxMW, r.mw);
+        acc.energyGWh += (r.mw * r.ms) / 3_600_000 / 1000;
+        acc.first = r.timestamp < acc.first ? r.timestamp : acc.first;
+        acc.last = r.timestamp > acc.last ? r.timestamp : acc.last;
+        acc.res.add(r.ms);
+        byPsr.set(r.psrType ?? "(none)", acc);
+      }
+      for (const [psr, a] of byPsr) {
+        perType[psr] = {
+          name: PSR_TYPES[psr]?.name ?? "UNMAPPED",
+          points: a.points,
+          maxMW: Math.round(a.maxMW * 10) / 10,
+          energyGWh: Math.round(a.energyGWh),
+          first: a.first,
+          last: a.last,
+          resolutionsMs: [...a.res],
+        };
+      }
+    }
+    // Alternative parameter name for the same document.
+    const alt = await fetch(
+      (() => {
+        const u = new URL("https://web-api.tp.entsoe.eu/api");
+        u.searchParams.set("securityToken", process.env.ENTSOE_API_TOKEN ?? "");
+        u.searchParams.set("documentType", DOC_GENERATION);
+        u.searchParams.set("processType", "A01");
+        u.searchParams.set("inBiddingZone_Domain", "10YNL----------L");
+        u.searchParams.set("periodStart", w.periodStart);
+        u.searchParams.set("periodEnd", w.periodEnd);
+        return u;
+      })(),
+      { headers: { Accept: "application/xml" }, signal: AbortSignal.timeout(120_000) },
+    );
+    if (alt.ok) {
+      const { records, psrTypes } = parseEntsoeIntervals(await alt.text());
+      report.figures.altInBiddingZoneDomain = { status: alt.status, psrTypes, points: records.length };
+    } else {
+      report.figures.altInBiddingZoneDomain = { status: alt.status };
+    }
+  }
+  report.figures.perTypeSummerDay = perType;
+  console.log("  per-type detail (summer day A69):", JSON.stringify(perType, null, 1));
 
   // Criterion 1: summer midday (10:00-15:00 UTC = 12:00-17:00 CEST) solar peak.
   const midday = solarRecords(summer).filter((r) => {
