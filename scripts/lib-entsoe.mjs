@@ -98,7 +98,11 @@ export const PSR_TYPES = {
   B17: { name: "Waste", series: "waste", renewable: true },
   B18: { name: "Wind Offshore", series: "wind_offshore", renewable: true },
   B19: { name: "Wind Onshore", series: "wind_onshore", renewable: true },
-  B20: { name: "Other renewable", series: "others", renewable: false },
+  // For the NL zone the TSO reports the upscaled solar estimate under B20
+  // "Other renewable" (probe: diurnal profile peaking ~11-16 GW, about 20+
+  // TWh/yr), while B16 carries only the small directly measured share, so
+  // the site's solar series is B16+B20 and B20 counts as renewable.
+  B20: { name: "Other renewable", series: "solar", renewable: true },
 };
 
 // The renewable MW sum is computed from the per-psrType renewable flags
@@ -268,8 +272,12 @@ function tagHistogramOf(node, hist = {}) {
 
 /**
  * Expand one ENTSO-E document XML into flat interval records:
- * [{ timestamp: ISO-Z, psrType: string|null, mw: number }].
+ * [{ timestamp: ISO-Z, psrType: string|null, mw: number, ms: interval ms }].
  * Point positions are 1-based; each point covers [ts, ts+resolution).
+ * Some documents repeat an interval across periods with different
+ * resolutions (e.g. a PT15M period plus a coarser summary period); those
+ * duplicates are collapsed per (psrType, timestamp), keeping the record
+ * from the finest resolution so energy sums are never double-counted.
  */
 export function parseEntsoeIntervals(xml) {
   const doc = parser.parse(xml);
@@ -299,6 +307,16 @@ export function parseEntsoeIntervals(xml) {
       }
     }
   }
+  // Collapse duplicate (psrType, timestamp) records, keeping the finest
+  // resolution (smallest ms); on a tie the later record wins.
+  const deduped = new Map();
+  for (const r of records) {
+    const key = `${r.psrType ?? ""}|${r.timestamp}`;
+    const prev = deduped.get(key);
+    if (!prev || r.ms <= prev.ms) deduped.set(key, r);
+  }
+  records.length = 0;
+  records.push(...deduped.values());
   return {
     records,
     psrTypes: [...seenPsr].sort(),

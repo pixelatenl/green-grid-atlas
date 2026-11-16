@@ -467,11 +467,11 @@ async function main() {
           parseTagValue: false,
           trimValues: true,
         });
-        const doc = p.parse(doc.xml);
+        const parsedDoc = p.parse(doc.xml);
         const seriesList = [
-          ...(doc?.GL_MarketDocument?.TimeSeries ?? []),
-          ...(doc?.GL_MarketDocument?.timeSeries ?? []),
-          ...Object.values(doc ?? {}).flatMap((v) => (v?.TimeSeries ?? [])),
+          ...(parsedDoc?.GL_MarketDocument?.TimeSeries ?? []),
+          ...(parsedDoc?.GL_MarketDocument?.timeSeries ?? []),
+          ...Object.values(parsedDoc ?? {}).flatMap((v) => (v?.TimeSeries ?? [])),
         ];
         const struct = seriesList.map((ts) => ({
           psr: ts.MktPSRType?.psrType ?? ts.MktPSRType?.["@_psrType"] ?? ts.psrType ?? null,
