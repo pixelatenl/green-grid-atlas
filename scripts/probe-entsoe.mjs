@@ -99,8 +99,16 @@ async function main() {
   const winter = await fetchNlPowerEnvelope(WINTER_DAY, WINTER_DAY + DAY_MS, { fresh: true });
   const trailing = await fetchNlPowerEnvelope(trailingStart, now, { fresh: true });
   if (!summer.ok || !winter.ok || !trailing.ok) {
-    console.error("ENTSO-E fetch failed for a probe window; see warnings above.");
+    report.checks.entsoeFetch = {
+      pass: false,
+      detail: `ENTSO-E window fetch failed (summer ok=${summer.ok}, winter ok=${winter.ok}, trailing ok=${trailing.ok}, trailing window failures=${trailing.failures}); per-window reasons are in the warnings above`,
+    };
+    console.error("\n=== ENTSO-E NL probe report (partial, figures collected so far) ===");
+    console.error(JSON.stringify(report, null, 2));
+    console.error(`Probe gate STOPPED: ENTSO-E fetch failed for a probe window (summer=${summer.ok} winter=${winter.ok} trailing=${trailing.ok}); criteria not evaluated, backfill not run.`);
+    process.exit(1);
   }
+  report.checks.entsoeFetch = { pass: true, detail: "all three ENTSO-E probe windows (summer day, winter day, trailing year) fetched" };
   report.figures.psrTypesSeen = trailing.psrTypes.map((c) => `${c} (${PSR_TYPES[c]?.name ?? "UNMAPPED"})`);
 
   const solarRecords = (env) => env.envelope.data.filter((r) => r.values.solar != null);
@@ -247,9 +255,23 @@ async function main() {
   if (price.ok) {
     const priceSlots = bucketHours(price.json.data.map((r) => ({ timestamp: r.timestamp, values: { day_ahead_price: r.values?.day_ahead_price ?? null } })));
     const entsoeSlots = bucketHours(trailing.envelope.data.map((r) => ({ timestamp: r.timestamp, values: r.values })));
-    const alignment = verifyHourAlignment([...entsoeSlots.keys()], [...priceSlots.keys()], { label: "trailing window" });
-    report.figures.alignment = alignment;
-    console.log(`  alignment: ${alignment.matched} ENTSO-E hour keys matched the price series, ${alignment.missing} reference hours not covered (lag), ${alignment.extra} misaligned`);
+    try {
+      const alignment = verifyHourAlignment([...entsoeSlots.keys()], [...priceSlots.keys()], { label: "trailing window" });
+      report.figures.alignment = alignment;
+      report.checks.alignment = {
+        pass: true,
+        detail: `${alignment.matched} ENTSO-E hour keys matched the unchanged price series, ${alignment.missing} reference hours beyond the ENTSO-E lag, ${alignment.extra} extra/misaligned keys`,
+      };
+      console.log(`  alignment: ${alignment.matched} ENTSO-E hour keys matched the price series, ${alignment.missing} reference hours not covered (lag), ${alignment.extra} misaligned`);
+    } catch (error) {
+      const msg = String(error?.message ?? error);
+      report.figures.alignment = { error: msg };
+      report.checks.alignment = { pass: false, detail: `alignment FAIL, UTC->CET/CEST hour keys do not line up with the price series: ${msg}` };
+      console.error(`  alignment FAIL: ${msg}`);
+    }
+  } else {
+    report.checks.alignment = { pass: false, detail: `alignment reference fetch failed (energy-charts price ok=${price.ok}: ${price.error?.message ?? price.error})` };
+    console.error(`  alignment SKIPPED as FAIL: price reference fetch failed: ${price.error?.message ?? price.error}`);
   }
 
   // Renewable composition comparison: recompute the old energy-charts
@@ -416,6 +438,32 @@ async function main() {
     report.figures.perTypeTrailingYear = perTypeTrailOut;
     console.log("  per-type trailing year:", JSON.stringify(perTypeTrailOut, null, 1));
 
+    // Double-count cross-check: the per-type trailing-year energies must
+    // compose a plausible national total. NL annual generation is on the
+    // order of 120-135 TWh, wind onshore (B19) roughly 16-17 TWh, wind
+    // offshore (B18) roughly 15-16 TWh, and solar (B16 + B20) must land in
+    // the probe band of 18-35 TWh annualized; solar near or above 40 TWh
+    // means a double count persists.
+    const ann = (gwh) => (gwh / 1000) * (365 / ((now - trailingStart) / DAY_MS));
+    const twhOf = (psr) => ann(perTypeTrail[psr]?.energyGWh ?? 0);
+    const totalTWh = ann(Object.values(perTypeTrail).reduce((s, a) => s + a.energyGWh, 0));
+    const windOnshoreTWh = twhOf("B19");
+    const windOffshoreTWh = twhOf("B18");
+    const solarB16B20TWh = twhOf("B16") + twhOf("B20");
+    const r1 = (x) => Math.round(x * 10) / 10;
+    report.figures.doubleCountCrossCheck = {
+      totalGenerationTWhAnnualized: r1(totalTWh),
+      windOnshoreB19TWhAnnualized: r1(windOnshoreTWh),
+      windOffshoreB18TWhAnnualized: r1(windOffshoreTWh),
+      solarB16plusB20TWhAnnualized: r1(solarB16B20TWh),
+      referenceBands: { total: "120-135 TWh/yr", windOnshore: "16-17 TWh/yr", windOffshore: "15-16 TWh/yr", solar: "18-35 TWh/yr (>= 40 means a double count persists)" },
+    };
+    report.checks.doubleCountCrossCheck = {
+      pass: solarB16B20TWh < 40 && totalTWh > 0,
+      detail: `trailing-year per-type energies annualize to total ${r1(totalTWh)} TWh (ref 120-135), wind onshore ${r1(windOnshoreTWh)} (ref 16-17), wind offshore ${r1(windOffshoreTWh)} (ref 15-16), solar B16+B20 ${r1(solarB16B20TWh)} TWh (probe band 18-35; >= 40 TWh means a double count persists)`,
+    };
+    console.log(`  double-count cross-check: ${JSON.stringify(report.figures.doubleCountCrossCheck)}`);
+
     // Summer-day hourly profile of B16 and B20 (UTC hours 8..18).
     const prof = { B16: {}, B20: {} };
     {
@@ -576,6 +624,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(`Probe aborted: ${error?.message ?? error}`);
   process.exit(1);
 });

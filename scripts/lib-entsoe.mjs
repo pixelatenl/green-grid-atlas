@@ -291,6 +291,12 @@ export function parseEntsoeIntervals(xml) {
     const rawPsr = ts["@_psrType"] ?? ts.psrType ?? mkt.psrType ?? mkt["@_psrType"] ?? null;
     const psrType = typeof rawPsr === "string" ? rawPsr : (rawPsr?.["#text"] ?? null);
     if (psrType) seenPsr.add(psrType);
+    // Final documents carry docStatus A05; provisional ones carry other codes.
+    // revisionNumber sits on the TimeSeries as an attribute in most responses.
+    const docStatusRaw = ts.docStatus?.["#text"] ?? ts.docStatus ?? ts["@_docStatus"] ?? null;
+    const docStatus = typeof docStatusRaw === "string" ? docStatusRaw : null;
+    const revRaw = ts["@_revisionNumber"] ?? ts.revisionNumber ?? null;
+    const revisionNumber = Number.isFinite(Number(revRaw)) ? Number(revRaw) : null;
     const periods = ts.Period ?? [];
     for (const period of periods) {
       const start = Date.parse(period.timeInterval?.["@_start"] ?? period.timeInterval?.start);
@@ -303,20 +309,31 @@ export function parseEntsoeIntervals(xml) {
         const qty = Number(point["@_quantity"] ?? point.quantity);
         if (!Number.isFinite(pos) || !Number.isFinite(qty)) continue;
         const tsMs = start + (pos - 1) * resMs;
-        records.push({ timestamp: new Date(tsMs).toISOString(), psrType, mw: qty, ms: resMs });
+        records.push({ timestamp: new Date(tsMs).toISOString(), psrType, mw: qty, ms: resMs, docStatus, revisionNumber });
       }
     }
   }
   // Collapse duplicate (psrType, timestamp) records. Documents can carry
-  // each type in more than one TimeSeries (e.g. a superseded revision);
-  // the primary copy comes first in document order, so on an equal
-  // resolution the FIRST record wins, and a strictly finer resolution
-  // (smaller ms) replaces a coarser summary of the same interval.
+  // each type in more than one TimeSeries copy. Preference order:
+  // docStatus A05 (final) over any provisional status, then the higher
+  // revisionNumber, then the finer resolution (smaller ms), and on a full
+  // tie the FIRST record in document order wins (identical values are a
+  // benign duplication).
+  const supersedes = (candidate, incumbent) => {
+    const candFinal = candidate.docStatus === "A05" ? 1 : 0;
+    const incFinal = incumbent.docStatus === "A05" ? 1 : 0;
+    if (candFinal !== incFinal) return candFinal > incFinal;
+    const candRev = candidate.revisionNumber ?? -1;
+    const incRev = incumbent.revisionNumber ?? -1;
+    if (candRev !== incRev) return candRev > incRev;
+    if (candidate.ms !== incumbent.ms) return candidate.ms < incumbent.ms;
+    return false;
+  };
   const deduped = new Map();
   for (const r of records) {
     const key = `${r.psrType ?? ""}|${r.timestamp}`;
     const prev = deduped.get(key);
-    if (!prev || r.ms < prev.ms) deduped.set(key, r);
+    if (!prev || supersedes(r, prev)) deduped.set(key, r);
   }
   records.length = 0;
   for (const r of deduped.values()) records.push(r);
