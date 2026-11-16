@@ -307,13 +307,16 @@ export function parseEntsoeIntervals(xml) {
       }
     }
   }
-  // Collapse duplicate (psrType, timestamp) records, keeping the finest
-  // resolution (smallest ms); on a tie the later record wins.
+  // Collapse duplicate (psrType, timestamp) records. Documents can carry
+  // each type in more than one TimeSeries (e.g. a superseded revision);
+  // the primary copy comes first in document order, so on an equal
+  // resolution the FIRST record wins, and a strictly finer resolution
+  // (smaller ms) replaces a coarser summary of the same interval.
   const deduped = new Map();
   for (const r of records) {
     const key = `${r.psrType ?? ""}|${r.timestamp}`;
     const prev = deduped.get(key);
-    if (!prev || r.ms <= prev.ms) deduped.set(key, r);
+    if (!prev || r.ms < prev.ms) deduped.set(key, r);
   }
   records.length = 0;
   for (const r of deduped.values()) records.push(r);

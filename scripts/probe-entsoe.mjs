@@ -476,6 +476,8 @@ async function main() {
         const struct = seriesList.map((ts) => ({
           psr: ts.MktPSRType?.psrType ?? ts.MktPSRType?.["@_psrType"] ?? ts.psrType ?? null,
           mRID: ts.mRID,
+          docStatus: ts.docStatus?.value ?? ts.docStatus ?? null,
+          revisionNumber: ts.revisionNumber ?? null,
           periods: (ts.Period ?? []).map((per) => ({
             resolution: per.resolution ?? per["@_resolution"] ?? null,
             points: (per.Point ?? []).length,
