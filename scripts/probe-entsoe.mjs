@@ -505,6 +505,20 @@ async function main() {
         }
         report.figures.b16b20Samples = samples;
         console.log("  B16/B20 samples per UTC hour:", JSON.stringify(samples));
+
+        // Raw XML of the B16 and B20 TimeSeries segments (response bodies
+        // never contain the token).
+        const xmlStr = String(doc.xml ?? "");
+        for (const psr of ["B16", "B20"]) {
+          const idx = xmlStr.indexOf(`<psrType>${psr}</psrType>`);
+          if (idx >= 0) {
+            const start = Math.max(0, xmlStr.lastIndexOf("<TimeSeries>", idx));
+            const end = xmlStr.indexOf("</TimeSeries>", idx);
+            const seg = xmlStr.slice(start, Math.min(end + 13, start + 3500));
+            report.figures[`rawXml_${psr}`] = seg;
+            console.log(`  raw XML ${psr} segment:\n${seg}`);
+          }
+        }
       }
     }
   }
