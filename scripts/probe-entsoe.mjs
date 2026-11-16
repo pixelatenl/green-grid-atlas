@@ -355,6 +355,66 @@ async function main() {
     console.log("  document matrix:", JSON.stringify(matrix, null, 1));
   }
 
+  // Appendix 3: where the NL solar volume lives in the actual per-type
+  // document (A75/A16): per-psrType trailing-year energy and the summer-day
+  // hourly profile of B16+B20 (diurnal shape check).
+  {
+    const perTypeTrail = {};
+    const chunks = [];
+    let cur = trailingStart;
+    while (cur < now) {
+      const yearEnd = Date.UTC(new Date(cur).getUTCFullYear() + 1, 0, 1);
+      const end = Math.min(now, yearEnd);
+      chunks.push({ periodStart: entsoeTs(cur), periodEnd: entsoeTs(end) });
+      cur = end;
+    }
+    for (const c of chunks) {
+      const doc = await fetchEntsoe({ documentType: DOC_GENERATION, ...c }, { fresh: true, label: "A75 trailing per-type" });
+      if (!doc.ok) continue;
+      const { records } = parseEntsoeIntervals(doc.xml);
+      for (const r of records) {
+        const psr = r.psrType ?? "(none)";
+        const acc = perTypeTrail[psr] ?? { points: 0, maxMW: -Infinity, energyGWh: 0 };
+        acc.points += 1;
+        acc.maxMW = Math.max(acc.maxMW, r.mw);
+        acc.energyGWh += (r.mw * r.ms) / 3_600_000 / 1000;
+        perTypeTrail[psr] = acc;
+      }
+    }
+    const perTypeTrailOut = {};
+    for (const [psr, a] of Object.entries(perTypeTrail)) {
+      perTypeTrailOut[psr] = {
+        name: PSR_TYPES[psr]?.name ?? "UNMAPPED",
+        points: a.points,
+        maxMW: Math.round(a.maxMW * 10) / 10,
+        energyGWh: Math.round(a.energyGWh),
+        energyTWhAnnualized: Math.round((a.energyGWh / 1000) * (365 / ((now - trailingStart) / DAY_MS)) * 10) / 10,
+      };
+    }
+    report.figures.perTypeTrailingYear = perTypeTrailOut;
+    console.log("  per-type trailing year:", JSON.stringify(perTypeTrailOut, null, 1));
+
+    // Summer-day hourly profile of B16 and B20 (UTC hours 8..18).
+    const prof = { B16: {}, B20: {} };
+    {
+      const doc = await fetchEntsoe(
+        { documentType: DOC_GENERATION, periodStart: entsoeTs(SUMMER_DAY), periodEnd: entsoeTs(SUMMER_DAY + DAY_MS) },
+        { fresh: true, label: "A75 summer profile" },
+      );
+      if (doc.ok) {
+        const { records } = parseEntsoeIntervals(doc.xml);
+        for (const r of records) {
+          if (r.psrType !== "B16" && r.psrType !== "B20") continue;
+          const h = new Date(r.timestamp).getUTCHours();
+          if (h < 6 || h > 20) continue;
+          prof[r.psrType][h] = Math.round((prof[r.psrType][h] ?? 0) + r.mw * (r.ms / 3_600_000));
+        }
+      }
+    }
+    report.figures.b16b20SummerProfileMW = prof;
+    console.log("  B16/B20 summer-day hourly MW:", JSON.stringify(prof));
+  }
+
   // Print the full report (figures only; the token is never printed).
   console.log("\n=== ENTSO-E NL probe report ===");
   console.log(JSON.stringify(report, null, 2));
