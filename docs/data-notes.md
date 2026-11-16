@@ -157,6 +157,58 @@ mirrored in `/llms-full.txt`) say, verbatim:
 - NL refreshes daily in the snapshot run; all other countries refresh on the
   first snapshot run of each week.
 
+## 6. ENTSO-E Transparency Platform, NL bidding zone (added 2026-11-16)
+
+The energy-charts NL solar series is defective: on 2026-06-15 its NL solar peak was 319.3 MW against a
+29.28 GW installed solar AC fleet (the same source's `/v2/installed_power`, latest `solar_ac` record), about
+1 percent, and it sums to roughly 0.48 TWh per year, while CBS reports 25.52 billion kWh of Dutch solar
+production in 2025 (provisional). NL generation and load therefore moved to ENTSO-E per-type data; every
+other zone keeps its energy-charts feed.
+
+- Endpoint: `https://web-api.tp.entsoe.eu/api`, GET only, XML response. Authentication via the
+  `securityToken` query parameter, read from the `ENTSOE_API_TOKEN` environment variable (Actions
+  repository secret; never logged, never cached to disk, never committed — the disk-cache keys in
+  `scripts/lib-entsoe.mjs` are built from the document parameters only).
+- Generation per production type: `documentType=A69`, `processType=A01`, `in_Domain=10YNL----------L`
+  (NL bidding zone EIC). One `timeSeries` per `psrType`; `Period` carries `timeInterval` (start/end, UTC)
+  and `resolution` (PT60M/PT15M); `Point` carries 1-based `position` and `quantity` in MW. Actual total
+  load: `documentType=A65`, same domain and process type.
+- Window parameters `periodStart`/`periodEnd` as `yyyyMMddHHmm` in UTC; maximum one year per request
+  (`scripts/lib-entsoe.mjs` `entsoeWindows` chunks by year at most; the trailing 365-day window fits in
+  two requests per document type).
+- Rate limit: 400 requests/minute per IP and per token; a 429 imposes a ten-minute ban. The fetch layer
+  paces at one request per second, one at a time, and on 429 waits `Retry-After` (fallback 600 s) times
+  the attempt number, capped at 900 s, up to 4 attempts.
+- Timestamps are UTC interval starts (`...Z`). The pipeline converts them to Europe/Amsterdam through
+  the shared `bucketHours`/`hourKey` path (a 25-hour fall-back day keeps both 02:00 slots, a 23-hour
+  spring-forward day has none) and every build verifies the conversion hour-by-hour against the
+  unchanged energy-charts price series (`verifyHourAlignment`): every ENTSO-E hour key must exist in
+  the price series; price-only hours are a publication lag, not an error.
+- psrType → site series mapping (`PSR_TYPES` in `scripts/lib-entsoe.mjs`): B16 Solar → `solar`,
+  B19 Wind Onshore → `wind_onshore`, B18 Wind Offshore → `wind_offshore`, B01 Biomass → `biomass`,
+  B17 Waste → `waste`, B14 Nuclear → `nuclear`, B02/B05 → `fossil_hard_coal`, B03/B04 → `fossil_gas`,
+  everything else (hydro B10/B11/B12, geothermal B09, marine B13, oil/peat, other B15/B20, unknown) →
+  `others`. The emission-factor table is keyed by energy-charts series ids and is unchanged.
+- Renewable set, computed explicitly from the A69 per-type series: Solar, Wind Onshore, Wind Offshore,
+  Biomass, Hydro Run-of-river and poundage, Hydro Water Reservoir, Hydro Pumped Storage (generation
+  side only — A69 is generation), Geothermal, Waste (psrTypes B16, B19, B18, B01, B11, B12, B10, B09, B17).
+- Composition check against the old feed (recomputed from the cached energy-charts per-type feeds,
+  2025, PT15M): `renewable_share_of_generation` ≈ (biomass + waste + wind_onshore + wind_offshore +
+  solar) / total generation, mean absolute difference about 1.3 percentage points (the served share is
+  not exactly reproducible from the per-type feeds; the site keeps the served definition's composition,
+  and the ENTSO-E renewable set above matches it — hydro/geothermal for NL sit inside energy-charts'
+  `others`, which the served share does not count as renewable). Residual load =
+  `load − wind_onshore − wind_offshore − solar` (mean absolute difference 0.04 MW on the 2025 cache).
+  `renewable_share_of_load` ≈ (same renewable sum) / load; the daily score share for NL is the mean of
+  the hourly shares per Amsterdam-local day, matching the energy-charts `ren_share_daily_avg` definition
+  used by the other 35 zones (mean absolute difference 0.57 points on the 49 comparable days).
+- Probe gate (`scripts/probe-entsoe.mjs`, run in Actions with the secret; figures recorded in the PR
+  description): summer midday solar peak in the multi-GW range consistent with the installed fleet,
+  trailing-window solar annualized in a plausible band around the CBS-reported ~25 TWh/yr, and summer
+  solar above winter solar. If any criterion fails, the backfill does not run. A one-off cross-zone
+  solar audit (`scripts/audit-zones.mjs`, energy-charts only) checks all 36 score zones' observed solar
+  peak on 2026-06-15 as a share of installed solar AC capacity; the pre-fix NL shows about 1 percent.
+
 ## Snapshot data contract
 
 `src/data/snapshot.json` (generated, committed; see `src/data/snapshot.ts` for

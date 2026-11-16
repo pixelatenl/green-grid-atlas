@@ -46,6 +46,25 @@ export const SOURCES = {
     licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
     licencePage: "https://open-meteo.com/en/licence",
   },
+  entsoe: {
+    name: "ENTSO-E Transparency Platform",
+    url: "https://transparency.entsoe.eu",
+    api: "https://web-api.tp.entsoe.eu/api",
+    docs: "https://transparency.entsoe.eu/content/operational-data",
+    licenseNote:
+      "NL generation and load are published on the ENTSO-E Transparency Platform pursuant to Regulation (EU) No 543/2013; reuse is subject to the platform's General Terms and Conditions (see transparency.entsoe.eu).",
+    documentTypes: { generationPerType: "A69", actualTotalLoad: "A65" },
+    processType: "A01",
+    domainEIC: "10YNL----------L",
+  },
+};
+
+/** ENTSO-E endpoint references recorded in the snapshot's sources.endpoints. */
+export const ENTSOE_ENDPOINTS = {
+  entsoeGeneration:
+    "ENTSO-E web-api.tp.entsoe.eu/api documentType=A69 processType=A01 in_Domain=10YNL----------L (NL bidding zone)",
+  entsoeLoad:
+    "ENTSO-E web-api.tp.entsoe.eu/api documentType=A65 processType=A01 in_Domain=10YNL----------L (NL bidding zone)",
 };
 
 /** NL representative point for the weather overlay (central Netherlands). */
@@ -393,6 +412,36 @@ export function recordsFromSamples(samples) {
     })),
     dunkel,
   );
+}
+
+/* ---------------- NL score from ENTSO-E per-type data ---------------- */
+
+/**
+ * Daily renewable share of load (percent) per Amsterdam-local day, computed
+ * from ENTSO-E A69/A65 hourly slots as the mean of the hourly renewable
+ * share of load — the same daily-average definition the energy-charts
+ * ren_share_daily_avg feed uses for the other zones (verified against its
+ * per-type feeds, see docs/data-notes.md). Input: hour slots (bucketHours
+ * output) whose values carry renewable_share_of_load. Returns the daily
+ * shares for the trailing `daysBack` local days, oldest first.
+ */
+export function dailyRenewableShareOfLoadFromSlots(slots, { daysBack = 365, now = Date.now() } = {}) {
+  const byDay = new Map();
+  for (const slot of slots) {
+    const v = slot.values.renewable_share_of_load;
+    if (v == null || !Number.isFinite(v)) continue;
+    const date = dayKey(slot.utc);
+    const acc = byDay.get(date) ?? { sum: 0, n: 0 };
+    acc.sum += v;
+    acc.n += 1;
+    byDay.set(date, acc);
+  }
+  const cutoff = new Date(now - daysBack * 86_400_000).toISOString().slice(0, 10);
+  const daily = [];
+  for (const [date, acc] of [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    if (date >= cutoff && acc.n > 0) daily.push(Math.round((acc.sum / acc.n) * 10) / 10);
+  }
+  return daily;
 }
 
 export { computeScore, mergeRecords, EMISSION_FACTORS_VERSION };

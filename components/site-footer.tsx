@@ -40,9 +40,20 @@ export function SiteFooter() {
             </a>
             . Retrieved {formatDate(s.retrievedAt)}.
           </p>
+          {s.entsoe && (
+            <p className="mt-1">
+              <a href={s.entsoe.url} className="underline underline-offset-4 hover:text-foreground">
+                ENTSO-E Transparency Platform
+              </a>{" "}
+              (NL generation per type, document type {s.entsoe.documentTypes.generationPerType}, and actual total
+              load, document type {s.entsoe.documentTypes.actualTotalLoad}; process type {s.entsoe.processType},
+              bidding zone {s.entsoe.domainEIC}). Retrieved {formatDate(s.entsoe.retrievedAt ?? s.retrievedAt)}.
+            </p>
+          )}
           <p className="mt-1">
             Data: energy-charts.info (Fraunhofer ISE), CC BY 4.0 — day-ahead prices CC BY 4.0 from
-            Bundesnetzagentur | SMARD.de. Full method, licenses and rules in the method drawer.
+            Bundesnetzagentur | SMARD.de; NL generation and load from the ENTSO-E Transparency Platform. Full
+            method, licenses and rules in the method drawer.
           </p>
         </>
       }

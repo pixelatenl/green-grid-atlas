@@ -5,13 +5,20 @@
     node --experimental-strip-types scripts/snapshot.mjs
 
   Fetches yesterday complete, today partial, and price_next_day (published
-  around 13:00 CET); updates the rolling trailing-12-month aggregates,
-  records, derived indicators (green window, red hours, risk, profiles) and
-  the score summaries. NL refreshes daily; the ~38-zone European card
-  refreshes on the first run of each ISO week. Narration is signature-gated
-  and fails soft without MISTRAL_API_KEY. Every fetch retries with backoff
-  and is paced one-at-a-time (scripts/lib-fetch.mjs); a failed non-critical
-  fetch degrades gracefully and never fails the run.
+  around 13:00 CET) from energy-charts.info; NL generation per type (A69)
+  and actual total load (A65) from the ENTSO-E Transparency Platform (NL
+  bidding zone 10YNL----------L, UTC converted to Europe/Amsterdam through
+  the shared slot keying and verified hour-by-hour against the unchanged
+  price series); the Open-Meteo weather overlay; and updates the rolling
+  trailing-12-month aggregates, records, derived indicators (green window,
+  red hours, risk, profiles) and the score summaries. NL refreshes daily
+  from ENTSO-E per-type data (score = daily renewable share of load,
+  trailing 365 days); the ~38-zone European card keeps its energy-charts
+  ren_share_daily_avg feed and refreshes on the first run of each ISO week.
+  Narration is signature-gated and fails soft without MISTRAL_API_KEY.
+  Every fetch retries with backoff and is paced one-at-a-time
+  (scripts/lib-fetch.mjs, scripts/lib-entsoe.mjs); a failed critical fetch
+  (price/cbpf/ENTSO-E) leaves the previous snapshot untouched.
 
   Requires a prior backfill (public/data/snapshot.json must exist).
 */
@@ -20,11 +27,13 @@ import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ecUrl, fetchJsonPaced, fetchOpenMeteo } from "./lib-fetch.mjs";
+import { fetchNlPowerEnvelope, verifyHourAlignment } from "./lib-entsoe.mjs";
 import {
   ZONE,
   TZ,
   WEATHER_POINT,
   TRAILING_MONTHS,
+  ENTSOE_ENDPOINTS,
   buildTrailingDays,
   mergeRecords,
   recordsFromSamples,
@@ -33,10 +42,11 @@ import {
   riskFromSamples,
   profilesFromSamples,
   computeScore,
+  dailyRenewableShareOfLoadFromSlots,
   slotsFromEnvelopes,
 } from "./lib-snapshot.mjs";
-import { bucketDays } from "../src/grid/hourly.ts";
-import { dayHourSequence, slotUtc } from "../src/grid/amsterdam-time.ts";
+import { bucketDays, bucketHours } from "../src/grid/hourly.ts";
+import { dayHourSequence, dayKey, parseTs, slotUtc } from "../src/grid/amsterdam-time.ts";
 import { WINDOW_RULE_TEXT } from "../src/grid/green-window.ts";
 import { EUROPE_COUNTRIES } from "../src/grid/scores.ts";
 import { narrate } from "./narrate.mjs";
@@ -44,6 +54,7 @@ import { narrate } from "./narrate.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, "..", "public", "data", "snapshot.json");
 const ROLLING_DAYS = 45; // covers yesterday complete + today partial with margin
+const DAY_MS = 86_400_000;
 
 function isoWeek(d) {
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -93,7 +104,6 @@ async function main() {
 
   // One request at a time, fresh (no cache) for the rolling window.
   const price = await fetchJsonPaced(ecUrl("/v2/price", { bzn: "NL", start: startDate, end: endDate }), { label: "price rolling", fresh: true });
-  const power = await fetchJsonPaced(ecUrl("/v2/public_power", { country: ZONE, start: startDate, end: endDate }), { label: "public_power rolling", fresh: true });
   const cbpf = await fetchJsonPaced(ecUrl("/v2/cbpf", { country: ZONE, start: startDate, end: endDate }), { label: "cbpf rolling", fresh: true });
   const nextDay = await fetchJsonPaced(ecUrl("/v2/price_next_day", { bzn: "NL" }), { label: "price_next_day", fresh: true });
   const weather = await fetchOpenMeteo(
@@ -107,18 +117,34 @@ async function main() {
     },
     { label: "open-meteo rolling", fresh: true },
   );
+  // ENTSO-E A69 + A65 for the NL zone over the trailing year (chunked by
+  // year at most): the last ROLLING_DAYS of it feed the rolling trailing
+  // days, the full year feeds the NL score (daily renewable share of load).
+  const entsoe = await fetchNlPowerEnvelope(now.getTime() - 365 * DAY_MS, now.getTime(), { fresh: true });
 
-  const criticalOk = price.ok && power.ok && cbpf.ok;
+  const criticalOk = price.ok && cbpf.ok && entsoe.ok;
   if (!criticalOk) {
-    console.error("Critical fetch failed (price/public_power/cbpf); keeping the previous snapshot untouched.");
+    console.error("Critical fetch failed (price/cbpf/ENTSO-E); keeping the previous snapshot untouched.");
     process.exitCode = 1;
     return;
   }
 
+  // Verify the ENTSO-E UTC -> Europe/Amsterdam conversion hour-by-hour
+  // against the unchanged energy-charts price series over the rolling
+  // window before anything is merged: every ENTSO-E hour key must exist in
+  // the price series (price-only hours are a data lag, not an error).
+  const rollingPowerEnv = {
+    data: entsoe.envelope.data.filter((r) => dayKey(parseTs(r.timestamp)) >= startDate),
+  };
+  const priceKeys = [...bucketHours(price.json.data.map((r) => ({ timestamp: r.timestamp, values: { p: r.values?.day_ahead_price ?? null } }))).keys()];
+  const entsoeKeys = [...bucketHours(rollingPowerEnv.data.map((r) => ({ timestamp: r.timestamp, values: r.values }))).keys()];
+  const alignment = verifyHourAlignment(entsoeKeys, priceKeys, { label: "rolling window" });
+  console.log(`  alignment: ${alignment.matched} ENTSO-E hour keys matched the price series, ${alignment.missing} price-only hours (lag), ${alignment.extra} misaligned`);
+
   // Merge: fresh rolling days replace stored days with the same date.
   const freshDays = buildTrailingDays({
     priceEnv: price.json,
-    powerEnv: power.json,
+    powerEnv: rollingPowerEnv,
     cbpfEnv: cbpf.json,
     weatherEnv: weather.ok ? weather.json : null,
   });
@@ -135,17 +161,20 @@ async function main() {
   const profiles = profilesFromSamples(samples, 30);
 
   // Records: keep the backfill's full-history records, merge new candidates
-  // from the rolling window (raw, unrounded) when power/cbpf are fresh.
+  // from the rolling window (raw, unrounded) when price/cbpf/ENTSO-E are fresh.
   let records = previous.records ?? [];
-  if (power.ok && cbpf.ok) {
-    const slots = slotsFromEnvelopes({ priceEnv: price.json, powerEnv: power.json, cbpfEnv: cbpf.json });
+  if (price.ok && cbpf.ok && entsoe.ok) {
+    const slots = slotsFromEnvelopes({ priceEnv: price.json, powerEnv: rollingPowerEnv, cbpfEnv: cbpf.json });
     const rollingDays = bucketDays([...slots.values()]);
     const rollingSamples = samplesFromDays(rollingDays);
     records = mergeRecords(records, recordsFromSamples(rollingSamples));
   }
 
-  // Scores: NL daily; all zones on the first run of each ISO week.
-  const renAvgNl = await fetchJsonPaced(ecUrl("/v2/ren_share_daily_avg", { country: ZONE, year: "-1" }), { label: "ren_share_daily_avg nl", fresh: true });
+  // Scores: NL daily from the ENTSO-E per-type data (daily renewable share
+  // of load, trailing 365 days); all other zones on the first run of each
+  // ISO week from their unchanged energy-charts feed.
+  const entsoeSlots = [...bucketHours(entsoe.envelope.data.map((r) => ({ timestamp: r.timestamp, values: r.values }))).values()];
+  const nlDailyShares = dailyRenewableShareOfLoadFromSlots(entsoeSlots, { daysBack: 365, now: now.getTime() });
   let scores = previous.scores ?? { retrievedAt, basis: "", composition: "", countries: [] };
   const weekNow = `${now.getUTCFullYear()}-W${String(isoWeek(now)).padStart(2, "0")}`;
   const weekPrev = scores.retrievedAt ? `${new Date(scores.retrievedAt).getUTCFullYear()}-W${String(isoWeek(new Date(scores.retrievedAt))).padStart(2, "0")}` : null;
@@ -156,9 +185,8 @@ async function main() {
     if (i >= 0) countries[i] = s;
     else countries.push(s);
   };
-  if (renAvgNl.ok) {
-    upsert(computeScore(ZONE, renAvgNl.json.data?.map((r) => r.values?.daily_avg_share ?? null) ?? []));
-  }
+  upsert(computeScore(ZONE, nlDailyShares));
+  console.log(`  NL score from ENTSO-E: mean ${countries.find((c) => c.country === ZONE)?.meanSharePct}% over ${nlDailyShares.length} days`);
   if (refreshAll) {
     console.log("  first run of the week: refreshing all zone scores");
     for (const c of EUROPE_COUNTRIES) {
@@ -174,7 +202,12 @@ async function main() {
   const snapshot = {
     ...previous,
     retrievedAt,
-    sources: { ...previous.sources, retrievedAt },
+    sources: {
+      ...previous.sources,
+      entsoe: { ...(previous.sources?.entsoe ?? {}), retrievedAt },
+      retrievedAt,
+      endpoints: { ...(previous.sources?.endpoints ?? {}), ...ENTSOE_ENDPOINTS },
+    },
     trailing,
     nextDay: nextDay.ok
       ? {

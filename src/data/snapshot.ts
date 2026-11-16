@@ -76,6 +76,18 @@ export interface Snapshot {
       licenseUrl: string;
       licencePage: string;
     };
+    /** ENTSO-E Transparency Platform: NL generation (A69) and load (A65). */
+    entsoe?: {
+      name: string;
+      url: string;
+      api: string;
+      docs: string;
+      licenseNote: string;
+      documentTypes: { generationPerType: string; actualTotalLoad: string };
+      processType: string;
+      domainEIC: string;
+      retrievedAt?: string;
+    };
     retrievedAt: string;
     endpoints: Record<string, string>;
   };

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "cn": "^0.5.2",
+    "fast-xml-parser": "^5.12.1",
     "lucide-react": "^1.66.0",
     "next": "^16.4.3",
     "react": "^19.0.0",

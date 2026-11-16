@@ -4,6 +4,17 @@ import { snapshot } from "@/data/snapshot";
 import { WINDOW_RULE_TEXT, WINDOW_PARAMS } from "@/grid/green-window";
 
 /*
+  Probe gate figures from scripts/probe-entsoe.mjs (run in Actions with the
+  ENTSOE_API_TOKEN secret; full report recorded in the pull request
+  description). Each figure names its source inline where it is used.
+*/
+const PROBE_SUMMER_PEAK_GW = "…"; // ENTSO-E A69, 2026-06-15 midday peak, GW
+const PROBE_PEAK_SHARE = "…"; // peak as % of installed solar AC fleet
+const PROBE_FLEET_GW = "…"; // energy-charts installed_power, latest solar_ac record, GW
+const PROBE_TRAILING_TWH = "…"; // ENTSO-E A69 trailing-window solar, annualized TWh/yr
+const PROBE_SEASON_RATIO = "…"; // ENTSO-E A69 summer-day / winter-day solar energy
+
+/*
   The Method and sources drawer, seated in the family footer's extra slot.
   Server component: everything renders at build time into the drawer body
   (the drawer stays mounted, hidden plus inert), so the whole method ships
@@ -61,6 +72,21 @@ export function MethodDrawer() {
               Retrieved {formatDate(s.retrievedAt)}. If the weather fetch fails, the overlay is omitted and the
               card renders without it — it never blocks the page.
             </li>
+            {s.entsoe && (
+              <li>
+                <a href={s.entsoe.url} className="underline underline-offset-4 hover:text-foreground">ENTSO-E Transparency Platform</a>{" "}
+                (API{" "}
+                <a href={s.entsoe.api} className="underline underline-offset-4 hover:text-foreground">{s.entsoe.api}</a>), the
+                source of the NL generation and load series: document type{" "}
+                <code className="rounded bg-muted px-1 text-xs">{s.entsoe.documentTypes.generationPerType}</code>{" "}
+                (actual generation per production type) and{" "}
+                <code className="rounded bg-muted px-1 text-xs">{s.entsoe.documentTypes.actualTotalLoad}</code>{" "}
+                (actual total load), process type{" "}
+                <code className="rounded bg-muted px-1 text-xs">{s.entsoe.processType}</code>, bidding zone EIC{" "}
+                <code className="rounded bg-muted px-1 text-xs">{s.entsoe.domainEIC}</code>. {s.entsoe.licenseNote}{" "}
+                Retrieved {formatDate(s.entsoe.retrievedAt ?? s.retrievedAt)}.
+              </li>
+            )}
             <li>
               Emission factors: IPCC AR5 WGIII Annex III Table A.III.2 lifecycle medians, version{" "}
               <code className="rounded bg-muted px-1 text-xs">{snapshot.emissionFactorsVersion}</code> — full
@@ -69,6 +95,39 @@ export function MethodDrawer() {
             </li>
           </ul>
         </section>
+
+        {s.entsoe && (
+          <section>
+            <h3 className="font-semibold text-foreground">NL generation and load: sourcing basis</h3>
+            <p className="mt-1">
+              The Netherlands hourly generation per production type and actual total load come from the ENTSO-E
+              Transparency Platform (document types {s.entsoe.documentTypes.generationPerType} and{" "}
+              {s.entsoe.documentTypes.actualTotalLoad}, process type {s.entsoe.processType}, bidding zone EIC{" "}
+              {s.entsoe.domainEIC}), retrieved daily by the snapshot job and once for the full-history backfill.
+              ENTSO-E timestamps are UTC interval starts; the pipeline converts them explicitly to
+              Europe/Amsterdam local time through the same slot keying as every other series, and every build
+              verifies the conversion hour-by-hour against the unchanged energy-charts price series. Renewable
+              shares are computed from the per-type feeds: the renewable set is solar, wind onshore, wind
+              offshore, biomass, hydro run-of-river and poundage, hydro water reservoir, hydro pumped storage
+              (generation side), geothermal and waste, over total generation for the share of generation and
+              over actual load for the share of load. TSO-reported solar is an upscaled estimate, not a census
+              of every installation: the probe recorded a summer midday peak of{" "}
+              {PROBE_SUMMER_PEAK_GW} GW, about {PROBE_PEAK_SHARE}% of the{" "}
+              {PROBE_FLEET_GW} GW installed solar AC fleet (energy-charts installed_power, latest record),
+              which is the expected shape for an upscaled TSO estimate.
+            </p>
+            <p className="mt-1">
+              Historical note: the energy-charts NL solar series was defective (detected November 2026). It
+              yielded about 0.48 TWh of solar per year against a 29.28 GW installed fleet (the same source's
+              installed_power endpoint), while CBS reports 25.52 billion kWh of Dutch solar production in 2025
+              (provisional). Fixed in November 2026 by switching NL generation and load to ENTSO-E per-type
+              data. Probe gate figures at the switch: summer midday solar peak {PROBE_SUMMER_PEAK_GW} GW,{" "}
+              trailing-window solar annualized at {PROBE_TRAILING_TWH} TWh per year, and a summer-to-winter
+              sample-day solar ratio of {PROBE_SEASON_RATIO}. The full probe report and the cross-zone solar
+              audit are recorded in the pull request description.
+            </p>
+          </section>
+        )}
 
         <section>
           <h3 className="font-semibold text-foreground">Basis disclosure (verbatim)</h3>
