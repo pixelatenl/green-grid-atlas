@@ -316,7 +316,7 @@ export function parseEntsoeIntervals(xml) {
     if (!prev || r.ms <= prev.ms) deduped.set(key, r);
   }
   records.length = 0;
-  records.push(...deduped.values());
+  for (const r of deduped.values()) records.push(r);
   return {
     records,
     psrTypes: [...seenPsr].sort(),
