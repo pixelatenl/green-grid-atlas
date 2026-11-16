@@ -130,6 +130,33 @@ async function main() {
           resolutionsMs: [...a.res],
         };
       }
+      // Compact header of every TimeSeries element in the raw document, so
+      // the log shows exactly which series the API returned and in what unit.
+      const { XMLParser } = await import("fast-xml-parser");
+      const p = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: "@_",
+        isArray: (name) => name === "TimeSeries" || name === "timeSeries" || name === "Period" || name === "Point",
+        parseTagValue: false,
+        trimValues: true,
+      });
+      const doc = p.parse(raw.xml);
+      const seriesList = [...(doc?.GL_MarketDocument?.TimeSeries ?? []), ...(doc?.GL_MarketDocument?.timeSeries ?? [])];
+      report.figures.seriesHeaders = seriesList.map((ts) => ({
+        mRID: ts.mRID,
+        businessType: ts.businessType,
+        objectAggregation: ts.objectAggregation,
+        curveType: ts.curveType,
+        psrElement: ts.MktPSRType?.psrType ?? ts.MktPSRType?.["@_psrType"] ?? ts.psrType ?? ts["@_psrType"] ?? null,
+        unit: ts.quantity_Measure_Unit?.name ?? ts["quantity_Measure_Unit.name"] ?? null,
+        periods: (ts.Period ?? []).map((per) => ({
+          resolution: per.resolution,
+          points: (per.Point ?? []).length,
+          start: per.timeInterval?.start,
+          end: per.timeInterval?.end,
+        })),
+      }));
+      console.log("  series headers:", JSON.stringify(report.figures.seriesHeaders));
     }
     // Alternative parameter name for the same document.
     const alt = await fetch(
