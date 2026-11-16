@@ -12,7 +12,8 @@
   - generation per production type: documentType=A69, processType=A01,
     in_Domain=10YNL----------L (NL bidding zone); one timeSeries per
     psrType, quantities in MW.
-  - actual total load: documentType=A65, processType=A01, same domain.
+  - actual total load: documentType=A65, processType=A01, out_Domain=10YNL----------L
+    (the load document takes out_Domain; generation takes in_Domain).
   - periodStart/periodEnd as yyyyMMddHHmm in UTC; maximum one year per
     request, so windows are chunked by year at most.
   - rate limit 400 requests/minute per IP and per token; a 429 imposes a
@@ -121,7 +122,11 @@ export function entsoeWindows(startUtcMs, endUtcMs) {
   return windows;
 }
 
-/** Build the request URL. The token never leaves this function's URL. */
+/**
+ * Build the request URL. The token never leaves this function's URL.
+ * A69 (generation) takes in_Domain; A65 (actual total load) takes
+ * out_Domain — same NL bidding zone EIC, different parameter name.
+ */
 function entsoeUrl({ documentType, periodStart, periodEnd }) {
   const token = process.env.ENTSOE_API_TOKEN;
   if (!token) throw new Error("ENTSOE_API_TOKEN is not set (Actions secret); ENTSO-E fetch refused");
@@ -129,7 +134,7 @@ function entsoeUrl({ documentType, periodStart, periodEnd }) {
   url.searchParams.set("securityToken", token);
   url.searchParams.set("documentType", documentType);
   url.searchParams.set("processType", PROCESS_TYPE);
-  url.searchParams.set("in_Domain", NL_DOMAIN_EIC);
+  url.searchParams.set(documentType === DOC_LOAD ? "out_Domain" : "in_Domain", NL_DOMAIN_EIC);
   url.searchParams.set("periodStart", periodStart);
   url.searchParams.set("periodEnd", periodEnd);
   return url;
@@ -172,7 +177,20 @@ export async function fetchEntsoe(params, { fresh = false, label = "" } = {}) {
         await sleep(wait);
         continue;
       }
-      if (!response.ok) throw new Error(`HTTP ${response.status} for ENTSO-E ${label || params.documentType}`);
+      if (!response.ok) {
+        // 4xx other than 429 is a client error (bad parameter combination);
+        // retrying cannot help, so fail immediately instead of burning
+        // attempts against the ten-minute ban.
+        if (response.status >= 400 && response.status < 500) {
+          const body = (await response.text().catch(() => "")).slice(0, 300);
+          return {
+            ok: false,
+            error: new Error(`HTTP ${response.status} for ENTSO-E ${label || params.documentType}${body ? `: ${body}` : ""}`),
+            status: response.status,
+          };
+        }
+        throw new Error(`HTTP ${response.status} for ENTSO-E ${label || params.documentType}`);
+      }
       const xml = await response.text();
       await mkdir(CACHE_DIR, { recursive: true });
       await writeFile(path.join(CACHE_DIR, key + ".xml"), xml, "utf8");
@@ -254,7 +272,14 @@ export function parseEntsoeIntervals(xml) {
       }
     }
   }
-  return { records, psrTypes: [...seenPsr].sort() };
+  return {
+    records,
+    psrTypes: [...seenPsr].sort(),
+    // Debug aid for the probe gate: the response body never contains the
+    // token, so a short snippet is safe to log when nothing was found.
+    rootKeys: records.length === 0 ? Object.keys(doc ?? {}) : undefined,
+    snippet: records.length === 0 ? String(xml ?? "").slice(0, 400) : undefined,
+  };
 }
 
 /**
@@ -280,8 +305,11 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
       console.warn(`  ENTSO-E A69 ${w.periodStart}-${w.periodEnd} FAILED: ${gen.error?.message ?? gen.error}`);
       continue;
     }
-    const { records, psrTypes } = parseEntsoeIntervals(gen.xml);
+    const { records, psrTypes, rootKeys, snippet } = parseEntsoeIntervals(gen.xml);
     for (const p of psrTypes) psrSeen.add(p);
+    if (gen.ok && records.length === 0) {
+      console.warn(`  ENTSO-E A69 ${w.periodStart}-${w.periodEnd} returned no timeSeries; root keys: ${JSON.stringify(rootKeys)}; body starts: ${snippet}`);
+    }
     for (const r of records) {
       const psr = PSR_TYPES[r.psrType];
       const seriesId = psr?.series ?? "others";
@@ -298,8 +326,11 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
       console.warn(`  ENTSO-E A65 ${w.periodStart}-${w.periodEnd} FAILED: ${load.error?.message ?? load.error}`);
       continue;
     }
-    const { records: loadRecords } = parseEntsoeIntervals(load.xml);
-    for (const r of loadRecords) {
+    const loadParsed = parseEntsoeIntervals(load.xml);
+    if (load.ok && loadParsed.records.length === 0) {
+      console.warn(`  ENTSO-E A65 ${w.periodStart}-${w.periodEnd} returned no timeSeries; root keys: ${JSON.stringify(loadParsed.rootKeys)}; body starts: ${loadParsed.snippet}`);
+    }
+    for (const r of loadParsed.records) {
       const rec = byTs.get(r.timestamp) ?? { values: {}, renMW: 0, totalMW: 0, loadMW: null, ms: 0 };
       rec.loadMW = (rec.loadMW ?? 0) + r.mw;
       rec.values.load = rec.loadMW;

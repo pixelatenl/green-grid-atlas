@@ -172,7 +172,8 @@ other zone keeps its energy-charts feed.
 - Generation per production type: `documentType=A69`, `processType=A01`, `in_Domain=10YNL----------L`
   (NL bidding zone EIC). One `timeSeries` per `psrType`; `Period` carries `timeInterval` (start/end, UTC)
   and `resolution` (PT60M/PT15M); `Point` carries 1-based `position` and `quantity` in MW. Actual total
-  load: `documentType=A65`, same domain and process type.
+  load: `documentType=A65`, process type `A01`, `out_Domain=10YNL----------L`
+  (the load document takes `out_Domain`; generation takes `in_Domain`).
 - Window parameters `periodStart`/`periodEnd` as `yyyyMMddHHmm` in UTC; maximum one year per request
   (`scripts/lib-entsoe.mjs` `entsoeWindows` chunks by year at most; the trailing 365-day window fits in
   two requests per document type).
