@@ -323,6 +323,38 @@ async function main() {
     console.log("  as-specified A69/A01 appendix:", JSON.stringify(asSpec));
   }
 
+  // Appendix 2: document/process matrix for the summer sample day, to map
+  // which ENTSO-E document carries the per-type actual generation and where
+  // the NL solar volume actually lives. Recorded for the PR description.
+  {
+    const matrix = {};
+    for (const [doc, proc] of [
+      ["A69", "A01"], ["A69", "A16"], ["A71", "A01"], ["A74", "A01"], ["A74", "A16"], ["A75", "A01"], ["A75", "A16"],
+    ]) {
+      const r = await fetchEntsoe(
+        { documentType: doc, processType: proc, periodStart: entsoeTs(SUMMER_DAY), periodEnd: entsoeTs(SUMMER_DAY + DAY_MS) },
+        { fresh: true, label: `matrix ${doc}/${proc}` },
+      );
+      if (!r.ok) {
+        matrix[`${doc}/${proc}`] = { error: String(r.error?.message ?? r.error).slice(0, 120) };
+        continue;
+      }
+      const { records, psrTypes } = parseEntsoeIntervals(r.xml);
+      const solar = records.filter((x) => x.psrType === "B16");
+      const midday = solar.filter((x) => new Date(x.timestamp).getUTCHours() >= 10 && new Date(x.timestamp).getUTCHours() < 15);
+      matrix[`${doc}/${proc}`] = {
+        psrTypes,
+        points: records.length,
+        solarPoints: solar.length,
+        solarMaxMW: solar.length ? Math.round(Math.max(...solar.map((x) => x.mw)) * 10) / 10 : null,
+        solarMiddayMaxMW: midday.length ? Math.round(Math.max(...midday.map((x) => x.mw)) * 10) / 10 : null,
+        solarGWh: Math.round(solar.reduce((s, x) => s + (x.mw * x.ms) / 3_600_000 / 1000, 0)),
+      };
+    }
+    report.figures.documentMatrix = matrix;
+    console.log("  document matrix:", JSON.stringify(matrix, null, 1));
+  }
+
   // Print the full report (figures only; the token is never printed).
   console.log("\n=== ENTSO-E NL probe report ===");
   console.log(JSON.stringify(report, null, 2));
