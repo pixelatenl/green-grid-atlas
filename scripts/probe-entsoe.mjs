@@ -489,6 +489,22 @@ async function main() {
         }));
         report.figures.periodStructure = struct;
         console.log("  period structure:", JSON.stringify(struct));
+
+        // Sample the B16/B20 point values per timestamp across ALL
+        // TimeSeries copies, to see which copy carries the diurnal bell.
+        const samples = {};
+        {
+          const { records } = parseEntsoeIntervals(doc.xml);
+          for (const r of records) {
+            if (r.psrType !== "B16" && r.psrType !== "B20") continue;
+            const h = new Date(r.timestamp).getUTCHours();
+            if (h < 10 || h > 16) continue;
+            const key = `${r.psrType} ${String(h).padStart(2, "0")}:00Z`;
+            samples[key] = [...(samples[key] ?? []), Math.round(r.mw)];
+          }
+        }
+        report.figures.b16b20Samples = samples;
+        console.log("  B16/B20 samples per UTC hour:", JSON.stringify(samples));
       }
     }
   }
