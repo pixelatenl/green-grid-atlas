@@ -4,15 +4,15 @@ import { snapshot } from "@/data/snapshot";
 import { WINDOW_RULE_TEXT, WINDOW_PARAMS } from "@/grid/green-window";
 
 /*
-  Probe gate figures from scripts/probe-entsoe.mjs, Actions run 43975014678
+  Probe gate figures from scripts/probe-entsoe.mjs, Actions run 44054759819
   (run with the ENTSOE_API_TOKEN secret; full report recorded in the pull
   request description). Each figure names its source inline where it is used.
 */
-const PROBE_PEAK_GW = "0.7"; // ENTSO-E A75/A16 aggregate peak, 2026-06-15 local midday, GW
-const PROBE_PEAK_SHARE_PCT = "2"; // peak as % of the daylight-connected fleet
+const PROBE_PEAK_GW = "9.8"; // ENTSO-E A75/A16 aggregate peak, 2026-06-15 local midday, GW
+const PROBE_PEAK_SHARE_PCT = "26.9"; // peak as % of the daylight-connected fleet
 const PROBE_DAYLIGHT_FLEET_GW = "36.46"; // energy-charts installed_power latest record: solar_ac + wind_onshore, GW
-const PROBE_ANNUAL_TWH = "4.7"; // ENTSO-E B16+B20 trailing-year aggregate, annualized TWh/yr
-const PROBE_DIURNAL_RATIO = "1.3"; // trailing-year local midday mean / night mean of the aggregate
+const PROBE_ANNUAL_TWH = "39.2"; // ENTSO-E B16+B20 trailing-year aggregate, annualized TWh/yr
+const PROBE_DIURNAL_RATIO = "3.9"; // trailing-year local midday mean / night mean of the aggregate
 
 /*
   The Method and sources drawer, seated in the family footer's extra slot.
