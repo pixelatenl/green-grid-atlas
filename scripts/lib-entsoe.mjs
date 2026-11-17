@@ -40,14 +40,14 @@
   keyed by energy-charts series ids and is not changed).
 
   Fetch integrity (docs/data-notes.md section 6, dual-version observation):
-  every A75 response carries each psrType in two TimeSeries copies and the
-  documents carry no docStatus/revisionNumber, so the platform can serve two
-  conflicting published versions of the same window and the parser's dedup
-  tie-break is document order. parseEntsoeIntervals therefore reports
-  per-psrType copy statistics before dedup (it never adjudicates by value),
-  and fetchNlPowerEnvelope guards every window with a coherence ratio against
-  the window's A65 load document plus a duplicate-copy ambiguity check, with
-  bounded fresh retries (INTEGRITY constants below).
+  every A75 response carries each psrType in two TimeSeries blocks (two
+  coexisting published collections of the same window; the documents carry no
+  docStatus/revisionNumber), so the parser dedups with a structural
+  block-completeness preference — the record from the block with the greater
+  total coverage wins — never by value, and reports per-psrType copy statistics
+  and block coverage before dedup. fetchNlPowerEnvelope then guards every
+  window with the coherence ratio against the window's A65 load document (the
+  sole gated check), with bounded fresh retries (INTEGRITY constants below).
 */
 
 import { createHash } from "node:crypto";
@@ -79,23 +79,22 @@ export const AS_SPECIFIED = { DOC: "A69", PROCESS: "A01" };
     energy over the timestamps where generation data exists. Dutch annual
     generation has been roughly 85-105% of load (CBS: record production and
     record exports in 2025); the defective platform variant observed in
-    probe run 43975014678 sat at 0.28 (33.7 TWh/yr generation against a
-    healthy 118.7 TWh/yr load document).
-  - AMBIGUITY_FACTOR 2: for every psrType whose largest per-copy mean
-    exceeds the materiality floor, all per-copy means must agree within a
-    factor of 2, otherwise the document served two conflicting published
-    versions of the same type and must not be silently adjudicated by
-    document order.
-  - MATERIALITY_FLOOR_MW 50: below this a copy divergence is numerical
-    noise, not a version conflict.
-  - MAX_WINDOW_ATTEMPTS 3: a failed attempt re-fetches the window's A75
-    document fresh (bypassing the disk cache, paced as usual); the first
-    passing attempt is kept.
+    probe runs 43975014678 and 44049087239 sat at 0.28-0.32 (33.7 TWh/yr
+    generation against a healthy 118.7 TWh/yr load document). This ratio is
+    the SOLE acceptance check of a window attempt.
+  - MATERIALITY_FLOOR_MW 50: per-copy divergence is only REPORTED as
+    evidence (never gated) for psrTypes whose largest per-copy mean exceeds
+    this floor. Probe run 44049087239 proved that both published collections
+    coexist in every A75 document, so large per-copy divergences are the
+    normal serving pattern, not a defect signal; the withdrawn ambiguity
+    factor-2 gate of addendum 3 rejected healthy documents because of it.
+  - MAX_WINDOW_ATTEMPTS 3: an attempt failing the coherence check re-fetches
+    the window's A75 document fresh (bypassing the disk cache, paced as
+    usual); the first passing attempt is kept.
 */
 export const INTEGRITY = {
   COHERENCE_RATIO_MIN: 0.6,
   COHERENCE_RATIO_MAX: 1.4,
-  AMBIGUITY_FACTOR: 2,
   MATERIALITY_FLOOR_MW: 50,
   MAX_WINDOW_ATTEMPTS: 3,
 };
@@ -331,11 +330,14 @@ export function parseEntsoeIntervals(xml) {
   const records = [];
   const seenPsr = new Set();
   // Collapse duplicate (psrType, timestamp) records. Documents can carry
-  // each type in more than one TimeSeries copy. Preference order:
-  // docStatus A05 (final) over any provisional status, then the higher
-  // revisionNumber, then the finer resolution (smaller ms), and on a full
-  // tie the FIRST record in document order wins (identical values are a
-  // benign duplication). The parser never adjudicates by value.
+  // each type in more than one TimeSeries copy, grouped in blocks (the
+  // platform serves two coexisting published collections per document; see
+  // the block tracking below and docs/data-notes.md section 6). Preference
+  // order: docStatus A05 (final) over any provisional status, then the higher
+  // revisionNumber, then the record from the block with the greater total
+  // coverage, then the finer resolution (smaller ms), and on a full tie the
+  // FIRST record in document order wins (identical values are a benign
+  // duplication). The parser never adjudicates by value.
   const supersedes = (candidate, incumbent) => {
     const candFinal = candidate.docStatus === "A05" ? 1 : 0;
     const incFinal = incumbent.docStatus === "A05" ? 1 : 0;
@@ -343,6 +345,11 @@ export function parseEntsoeIntervals(xml) {
     const candRev = candidate.revisionNumber ?? -1;
     const incRev = incumbent.revisionNumber ?? -1;
     if (candRev !== incRev) return candRev > incRev;
+    // Block completeness preference: the record from the block with the
+    // greater total coverage wins. Structural, never a value comparison.
+    const candCov = candidate.blockCov ?? -1;
+    const incCov = incumbent.blockCov ?? -1;
+    if (candCov !== incCov) return candCov > incCov;
     if (candidate.ms !== incumbent.ms) return candidate.ms < incumbent.ms;
     return false;
   };
@@ -352,6 +359,12 @@ export function parseEntsoeIntervals(xml) {
   // silently by document order (docs/data-notes.md section 6, dual-version
   // observation). The parser only reports; it never adjudicates by value.
   const copyBuckets = new Map(); // psr -> { series: [...], keyCounts: Map<ts, {n, mws}> }
+  // Blocks: while reading TimeSeries in document order, a repeat of a psrType
+  // already seen in the current block starts a new block; every series belongs
+  // to exactly one block. Block coverage = the number of distinct timestamps
+  // covered by the block, summed over all its series.
+  const blocks = []; // { id, psrSet: Set, series: [copy...], coverage }
+  let currentBlock = null;
   let copyIndex = 0;
   for (const ts of series) {
     copyIndex += 1;
@@ -369,9 +382,15 @@ export function parseEntsoeIntervals(xml) {
     const revRaw = ts["@_revisionNumber"] ?? ts.revisionNumber ?? null;
     const revisionNumber = Number.isFinite(Number(revRaw)) ? Number(revRaw) : null;
     const psrKey = psrType ?? "(none)";
+    if (!currentBlock || currentBlock.psrSet.has(psrKey)) {
+      currentBlock = { id: blocks.length + 1, psrSet: new Set(), series: [], coverage: 0 };
+      blocks.push(currentBlock);
+    }
+    currentBlock.psrSet.add(psrKey);
     if (!copyBuckets.has(psrKey)) copyBuckets.set(psrKey, { series: [], keyCounts: new Map() });
     const bucket = copyBuckets.get(psrKey);
-    const copy = { index: copyIndex, mRID, points: 0, byTs: new Map() };
+    const copy = { index: copyIndex, mRID, block: currentBlock.id, points: 0, byTs: new Map() };
+    currentBlock.series.push(copy);
     bucket.series.push(copy);
     const periods = ts.Period ?? [];
     for (const period of periods) {
@@ -385,7 +404,7 @@ export function parseEntsoeIntervals(xml) {
         const qty = Number(point["@_quantity"] ?? point.quantity);
         if (!Number.isFinite(pos) || !Number.isFinite(qty)) continue;
         const tsMs = start + (pos - 1) * resMs;
-        const record = { timestamp: new Date(tsMs).toISOString(), psrType, mw: qty, ms: resMs, docStatus, revisionNumber };
+        const record = { timestamp: new Date(tsMs).toISOString(), psrType, mw: qty, ms: resMs, docStatus, revisionNumber, block: copy.block };
         records.push(record);
         copy.points += 1;
         const prevCopy = copy.byTs.get(record.timestamp);
@@ -397,6 +416,12 @@ export function parseEntsoeIntervals(xml) {
       }
     }
   }
+  // Block coverage: distinct timestamps per block, summed over all its series;
+  // attached to every record so the dedup chain can prefer the more complete
+  // block (computed before the merged dedup below).
+  for (const b of blocks) b.coverage = b.series.reduce((s, c) => s + c.byTs.size, 0);
+  const blockCovById = new Map(blocks.map((b) => [b.id, b.coverage]));
+  for (const r of records) r.blockCov = blockCovById.get(r.block) ?? 0;
   // Finalize the per-psrType copy statistics (before the merged dedup below).
   const copies = {};
   for (const [psr, bucket] of copyBuckets) {
@@ -417,7 +442,7 @@ export function parseEntsoeIntervals(xml) {
         const last = recs.length ? recs.map((r) => r.timestamp).reduce((a, b) => (a > b ? a : b)) : null;
         const meanMW = recs.length ? recs.reduce((s, r) => s + r.mw, 0) / recs.length : null;
         const energyGWh = recs.reduce((s, r) => s + (r.mw * r.ms) / 3_600_000 / 1000, 0);
-        return { index: c.index, mRID: c.mRID, points: c.points, timestamps: c.byTs.size, first, last, meanMW, energyGWh };
+        return { index: c.index, mRID: c.mRID, block: c.block, points: c.points, timestamps: c.byTs.size, first, last, meanMW, energyGWh };
       }),
     };
   }
@@ -438,6 +463,9 @@ export function parseEntsoeIntervals(xml) {
     // number of (psrType, timestamp) keys carrying more than one record and
     // how many of those carry differing values.
     copies,
+    // Blocks with their coverage (distinct timestamps per block and the
+    // per-block series count), so the block preference is auditable.
+    blocks: blocks.map((b) => ({ block: b.id, series: b.series.length, coverage: b.coverage })),
     // Debug aid for the probe gate: the response body never contains the
     // token, so a short snippet and a tag histogram are safe to log when
     // nothing was found.
@@ -453,13 +481,16 @@ export function parseEntsoeIntervals(xml) {
  *
  *  1. coverage (reported, never gated): fraction of the window's
  *     load-bearing timestamps that also carry generation data.
- *  2. coherence ratio (gated): total generation energy / total load energy,
- *     computed only over timestamps where generation data exists (load
- *     energy is 0 where the load document has no record). Accept only
- *     within [COHERENCE_RATIO_MIN, COHERENCE_RATIO_MAX].
- *  3. ambiguity guard (gated): for every psrType whose largest per-copy mean
- *     exceeds MATERIALITY_FLOOR_MW, the per-copy means must agree within
- *     AMBIGUITY_FACTOR.
+ *  2. coherence ratio (the SOLE gated check): total generation energy /
+ *     total load energy, computed only over timestamps where generation data
+ *     exists (load energy is 0 where the load document has no record).
+ *     Accept only within [COHERENCE_RATIO_MIN, COHERENCE_RATIO_MAX].
+ *  3. ambiguity (reported as evidence, never gated): for every psrType whose
+ *     largest per-copy mean exceeds MATERIALITY_FLOOR_MW, the per-copy means
+ *     and their divergence factor. Run 44049087239 proved both published
+ *     collections coexist in every document, so divergence is expected and
+ *     is not an acceptance signal; the block-completeness preference in the
+ *     parser dedup plus the coherence ratio carry the integrity decision.
  */
 export function evaluateWindowAttempt(genParsed, loadParsed) {
   const genEnergyMWh = new Map(); // ts -> generation energy in MWh
@@ -482,7 +513,7 @@ export function evaluateWindowAttempt(genParsed, loadParsed) {
     loadEnergy += loadEnergyMWh.get(ts) ?? 0;
   }
   const ratio = loadEnergy > 0 ? genEnergy / loadEnergy : null;
-  const ambiguity = [];
+  const ambiguity = []; // evidence only, never gated
   for (const [psr, c] of Object.entries(genParsed.copies ?? {})) {
     const means = c.series.map((s) => s.meanMW).filter((m) => Number.isFinite(m));
     if (!means.length) continue;
@@ -490,20 +521,17 @@ export function evaluateWindowAttempt(genParsed, loadParsed) {
     if (max <= INTEGRITY.MATERIALITY_FLOOR_MW) continue;
     const min = Math.min(...means);
     const factor = min > 0 ? max / min : Infinity;
-    if (factor > INTEGRITY.AMBIGUITY_FACTOR) {
-      ambiguity.push({
-        psrType: psr,
-        name: PSR_TYPES[psr]?.name ?? "UNMAPPED",
-        copyMeansMW: means.map((m) => r1(m)),
-        largestCopyMeanMW: r1(max),
-        smallestCopyMeanMW: r1(min),
-        factor: Number.isFinite(factor) ? r1(factor) : "infinite",
-      });
-    }
+    ambiguity.push({
+      psrType: psr,
+      name: PSR_TYPES[psr]?.name ?? "UNMAPPED",
+      copyMeansMW: means.map((m) => r1(m)),
+      largestCopyMeanMW: r1(max),
+      smallestCopyMeanMW: r1(min),
+      factor: Number.isFinite(factor) ? r1(factor) : "infinite",
+    });
   }
   const failedChecks = [];
   if (ratio == null || ratio < INTEGRITY.COHERENCE_RATIO_MIN || ratio > INTEGRITY.COHERENCE_RATIO_MAX) failedChecks.push("coherence");
-  if (ambiguity.length > 0) failedChecks.push("ambiguity");
   return { coverage, ratio, ambiguity, pass: failedChecks.length === 0, failedChecks };
 }
 
@@ -523,18 +551,20 @@ export function evaluateWindowAttempt(genParsed, loadParsed) {
  *
  * Window acceptance guard (fetch integrity, docs/data-notes.md section 6):
  * every window's A75 document is checked for coherence against the window's
- * A65 load document (generation/load energy ratio within 0.6-1.4 over
- * timestamps with generation data) and for duplicate-copy ambiguity
- * (per-copy means within a factor of 2 above a 50 MW materiality floor).
+ * A65 load document — total generation energy over total load energy, over
+ * timestamps with generation data, must sit within 0.6-1.4 (the sole gated
+ * check). The parser additionally prefers the more complete TimeSeries block
+ * per psrType when deduplicating the two coexisting published collections.
  * A failed attempt re-fetches the A75 document FRESH (bypassing the disk
  * cache, paced as usual), up to INTEGRITY.MAX_WINDOW_ATTEMPTS attempts; the
  * first passing attempt is merged. Copies are never summed and versions are
  * never mixed across retries. If no attempt passes, the window is marked
  * failed and surfaced in the returned windowRecords (full attempts table:
- * per attempt the ratio, per-type ambiguity findings and coverage), so
- * callers can fail legibly. Coverage is reported per attempt but not gated.
- * The returned windowRecords also carry the accepted attempt's per-psrType
- * copy statistics (from parseEntsoeIntervals) for the probe report.
+ * per attempt the ratio, per-type copy-divergence evidence, block coverage
+ * figures and coverage), so callers can fail legibly. Coverage is reported
+ * per attempt but not gated. The returned windowRecords also carry the
+ * accepted attempt's per-psrType copy statistics (from parseEntsoeIntervals)
+ * for the probe report.
  */
 export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false } = {}) {
   const windows = entsoeWindows(startUtcMs, endUtcMs);
@@ -583,8 +613,13 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
         fromCache: gen.fromCache,
         coverage: evaluation.coverage != null ? r3(evaluation.coverage) : null,
         coherenceRatio: evaluation.ratio != null ? r3(evaluation.ratio) : null,
+        // Evidence figures, never gated: per-copy divergence above the
+        // materiality floor, the duplicate-key counts, and the block coverage
+        // figures the parser's block preference computed.
         ambiguity: evaluation.ambiguity,
         duplicateKeys: Object.fromEntries(Object.entries(genParsed.copies ?? {}).map(([psr, c]) => [psr, { duplicateKeys: c.duplicateKeys, differingKeys: c.differingKeys }])),
+        blocks: genParsed.blocks,
+        blockCoverageTotal: (genParsed.blocks ?? []).reduce((s, b) => s + b.coverage, 0),
         pass: evaluation.pass,
         failedChecks: evaluation.failedChecks,
       });
@@ -594,8 +629,8 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
       }
       console.warn(
         `  ENTSO-E ${DOC_GENERATION} ${w.periodStart}-${w.periodEnd} attempt ${attempt} rejected (${evaluation.failedChecks.join("+")}): ` +
-        `coherence ratio ${evaluation.ratio != null ? r3(evaluation.ratio) : "n/a"} (band ${INTEGRITY.COHERENCE_RATIO_MIN}-${INTEGRITY.COHERENCE_RATIO_MAX}), ` +
-        `ambiguity ${evaluation.ambiguity.length ? JSON.stringify(evaluation.ambiguity) : "none"}; ` +
+        `coherence ratio ${evaluation.ratio != null ? r3(evaluation.ratio) : "n/a"} (band ${INTEGRITY.COHERENCE_RATIO_MIN}-${INTEGRITY.COHERENCE_RATIO_MAX}); ` +
+        `per-copy divergence (evidence): ${evaluation.ambiguity.length ? evaluation.ambiguity.map((x) => `${x.psrType} factor ${x.factor}`).join(", ") : "none"}; ` +
         (attempt < INTEGRITY.MAX_WINDOW_ATTEMPTS ? "re-fetching fresh" : "no attempts left"),
       );
     }
@@ -607,13 +642,13 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
       coverage: acceptedAttempt ? attempts[acceptedAttempt - 1].coverage : null,
       copies: accepted ? accepted.copies : null,
       failed: !accepted,
-      reason: accepted ? null : `no A75 attempt passed the window integrity guard after ${attempts.length} attempt(s) (coherence band ${INTEGRITY.COHERENCE_RATIO_MIN}-${INTEGRITY.COHERENCE_RATIO_MAX}, ambiguity factor ${INTEGRITY.AMBIGUITY_FACTOR} above ${INTEGRITY.MATERIALITY_FLOOR_MW} MW)`,
+      reason: accepted ? null : `no A75 attempt passed the window coherence check after ${attempts.length} attempt(s) (generation/load energy ratio band ${INTEGRITY.COHERENCE_RATIO_MIN}-${INTEGRITY.COHERENCE_RATIO_MAX} over timestamps with generation data)`,
     });
     if (!accepted) {
       failures += 1;
       console.warn(
-        `  ENTSO-E ${DOC_GENERATION} window ${w.periodStart}-${w.periodEnd} FAILED the integrity guard: ` +
-        attempts.map((a) => `attempt ${a.attempt}: ratio ${a.coherenceRatio ?? "n/a"}, ambiguity ${a.ambiguity.length ? `${a.ambiguity.length} type(s): ${a.ambiguity.map((x) => `${x.psrType} factor ${x.factor}`).join(", ")}` : "none"}, coverage ${a.coverage ?? "n/a"}`).join("; "),
+        `  ENTSO-E ${DOC_GENERATION} window ${w.periodStart}-${w.periodEnd} FAILED the coherence check: ` +
+        attempts.map((a) => `attempt ${a.attempt}: ratio ${a.coherenceRatio ?? "n/a"}, coverage ${a.coverage ?? "n/a"}, blockCoverageTotal ${a.blockCoverageTotal ?? "n/a"}`).join("; "),
       );
       continue;
     }

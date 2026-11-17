@@ -25,13 +25,15 @@
        hours (00:00-05:00), expected about 4-5x; the broken feed was flat.
 
   The double-count cross-check derives from the same parsed per-type arrays
-  as criterion 2 and must agree with it to the MWh. The fetch layer's window
-  acceptance guard (per-window coherence ratio against the A65 load document
-  plus duplicate-copy ambiguity, bounded fresh retries) is reported per
-  window in report.figures.windowAttempts, and the accepted attempt's
-  per-psrType copy statistics in report.figures.trailingWindowCopies, so the
-  report shows both published versions' per-type energies whenever a document
-  carries two divergent copies of a type. The gate also verifies,
+  as criterion 2 and must agree with it to the MWh. The fetch layer dedups the
+  two published TimeSeries blocks per type by block completeness (structural,
+  never by value) and accepts each window on the coherence ratio against the
+  A65 load document; that ratio, the per-copy divergence evidence and the
+  block coverage figures are reported per window in
+  report.figures.windowAttempts, and the accepted attempt's per-psrType copy
+  statistics in report.figures.trailingWindowCopies, so the report shows both
+  published blocks' per-type energies whenever they coexist in one document.
+  The gate also verifies,
   hour by hour, that the UTC->Europe/Amsterdam conversion of the ENTSO-E
   timestamps aligns with the unchanged energy-charts price series, records
   the canonical hour (2026-04-26 local 13:00/14:00, before vs after), and
@@ -125,14 +127,16 @@ async function main() {
 
   // One deduplicated trailing-year series (A75 generation + A65 load, chunked
   // by year at most) drives every criterion; the 2026-06-15 and 2026-01-15
-  // sample days are extracted from it below in local time. The fetch layer's
-  // window acceptance guard (coherence ratio + duplicate-copy ambiguity,
-  // bounded fresh retries) ran per window; its records are printed here.
+  // sample days are extracted from it below in local time. The fetch layer
+  // dedups the two coexisting published TimeSeries blocks per type by block
+  // completeness and accepts each window on the coherence ratio against its
+  // A65 load document alone (bounded fresh retries); its per-window records
+  // are printed here.
   const trailing = await fetchNlPowerEnvelope(trailingStart, now, { fresh: true });
-  // Per-window attempts table (ratio per attempt, ambiguity findings per
-  // attempt, accepted attempt, coverage) and the accepted attempt's per-type
-  // copy statistics, so the report shows both published versions' per-type
-  // energies whenever they coexist in one document.
+  // Per-window attempts table (ratio per attempt, per-copy divergence
+  // evidence, block coverage figures, accepted attempt, coverage) and the
+  // accepted attempt's per-type copy statistics, so the report shows both
+  // published blocks' per-type energies whenever they coexist in one document.
   const sanitizeCopies = (copies) => {
     if (!copies) return null;
     const out = {};
@@ -144,6 +148,7 @@ async function main() {
         series: c.series.map((s) => ({
           index: s.index,
           mRID: s.mRID,
+          block: s.block,
           points: s.points,
           timestamps: s.timestamps,
           first: s.first,
@@ -173,11 +178,11 @@ async function main() {
   if (!trailing.ok) {
     const failedWindows = (trailing.windowRecords ?? []).filter((w) => w.failed);
     const detail = failedWindows.length
-      ? `ENTSO-E trailing-year window fetch failed the window integrity guard (failures=${trailing.failures}): ` +
+      ? `ENTSO-E trailing-year window fetch failed the window coherence check (failures=${trailing.failures}): ` +
         failedWindows
           .map((w) =>
             `window ${w.window.periodStart}-${w.window.periodEnd} ${w.reason}; attempts: ` +
-            w.attempts.map((a) => `#${a.attempt} ratio ${a.coherenceRatio ?? "n/a"}, coverage ${a.coverage ?? "n/a"}, ambiguity ${a.ambiguity.length ? a.ambiguity.map((x) => `${x.psrType} factor ${x.factor}`).join(", ") : "none"}`).join("; "),
+            w.attempts.map((a) => `#${a.attempt} ratio ${a.coherenceRatio ?? "n/a"}, coverage ${a.coverage ?? "n/a"}, blockCoverageTotal ${a.blockCoverageTotal ?? "n/a"}, per-copy divergence (evidence) ${a.ambiguity.length ? a.ambiguity.map((x) => `${x.psrType} factor ${x.factor}`).join(", ") : "none"}`).join("; "),
           )
           .join(" | ")
       : `ENTSO-E trailing-year window fetch failed (failures=${trailing.failures}); per-window reasons are in figures.windowAttempts`;
@@ -189,7 +194,7 @@ async function main() {
   }
   report.checks.entsoeFetch = {
     pass: true,
-    detail: `trailing-year ENTSO-E windows (A75 + A65, chunked by year) fetched and passed the window integrity guard (accepted attempts: ${windowAttemptsFigure.map((w) => `${w.window.periodStart}-${w.window.periodEnd}#${w.acceptedAttempt}`).join(", ")}) and parsed`,
+    detail: `trailing-year ENTSO-E windows (A75 + A65, chunked by year) fetched and passed the window coherence check (accepted attempts: ${windowAttemptsFigure.map((w) => `${w.window.periodStart}-${w.window.periodEnd}#${w.acceptedAttempt}`).join(", ")}) and parsed`,
   };
   report.figures.psrTypesSeen = trailing.psrTypes.map((c) => `${c} (${PSR_TYPES[c]?.name ?? "UNMAPPED"})`);
 
