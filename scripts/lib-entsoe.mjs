@@ -13,7 +13,7 @@
     processType=A16 (realised), in_Domain=10YNL----------L (NL bidding
     zone); one TimeSeries per psrType, quantities in MW. (The A69/A01
     combination returns only the wind-and-solar day-ahead forecast,
-    businessType A93/A94 — verified against the live API in the probe
+    businessType A93/A94, verified against the live API in the probe
     gate; A75/A16 is the actual per-type document.)
   - actual total load: documentType=A65, processType=A16 (realised),
     outBiddingZone_Domain=10YNL----------L (the load document requires
@@ -35,7 +35,7 @@
   The renewable set is computed explicitly from the A75 per-type series:
   Solar, Wind Onshore, Wind Offshore, Biomass, Hydro Run-of-river and
   poundage, Hydro Water Reservoir, Hydro Pumped Storage (generation side
-  only — the generation document carries generation), Geothermal, Waste. The remaining production
+  only: the generation document carries generation), Geothermal, Waste. The remaining production
   types feed the site's "others" bucket (the emission-factor table is
   keyed by energy-charts series ids and is not changed).
 
@@ -43,8 +43,8 @@
   every A75 response carries each psrType in two TimeSeries blocks (two
   coexisting published collections of the same window; the documents carry no
   docStatus/revisionNumber), so the parser dedups with a structural
-  block-completeness preference — the record from the block with the greater
-  total coverage wins — never by value, and reports per-psrType copy statistics
+  block-completeness preference: the record from the block with the greater
+  total coverage wins, never by value, and reports per-psrType copy statistics
   and block coverage before dedup. fetchNlPowerEnvelope then guards every
   window with the coherence ratio against the window's A65 load document (the
   sole gated check), with bounded fresh retries (INTEGRITY constants below).
@@ -182,7 +182,7 @@ export function entsoeWindows(startUtcMs, endUtcMs) {
 /**
  * Build the request URL. The token never leaves this function's URL.
  * A75 (generation) takes in_Domain; A65 (actual total load) requires
- * outBiddingZone_Domain — same NL bidding zone EIC, different parameter
+ * outBiddingZone_Domain: same NL bidding zone EIC, different parameter
  * name (the API rejects A65 without it, verified in the probe gate).
  */
 function entsoeUrl({ documentType, periodStart, periodEnd, processType = PROCESS_TYPE }) {
@@ -198,7 +198,7 @@ function entsoeUrl({ documentType, periodStart, periodEnd, processType = PROCESS
   return url;
 }
 
-/** Cache key from document parameters only — never contains the token. */
+/** Cache key from document parameters only; never contains the token. */
 function cacheKey(params) {
   return "entsoe-" + createHash("sha1").update(JSON.stringify(params)).digest("hex");
 }
@@ -551,7 +551,7 @@ export function evaluateWindowAttempt(genParsed, loadParsed) {
  *
  * Window acceptance guard (fetch integrity, docs/data-notes.md section 6):
  * every window's A75 document is checked for coherence against the window's
- * A65 load document — total generation energy over total load energy, over
+ * A65 load document: total generation energy over total load energy, over
  * timestamps with generation data, must sit within 0.6-1.4 (the sole gated
  * check). The parser additionally prefers the more complete TimeSeries block
  * per psrType when deduplicating the two coexisting published collections.

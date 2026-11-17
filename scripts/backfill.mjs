@@ -1,12 +1,12 @@
 /*
   Backfill (ONE-TIME, run locally, on the mini PC or via the one-off
-  entsoe-backfill workflow in Actions — never scheduled):
+  entsoe-backfill workflow in Actions, never scheduled):
 
     node --experimental-strip-types scripts/backfill.mjs
 
   Fetches, politely paced and chunked per year (see scripts/lib-fetch.mjs,
   scripts/lib-entsoe.mjs and docs/data-notes.md), the full 2015-to-present
-  NL history — day-ahead price and per-neighbor flows from
+  NL history: day-ahead price and per-neighbor flows from
   energy-charts.info v2, hourly weather from Open-Meteo, and generation per
   production type (A75) plus actual total load (A65) from the ENTSO-E
   Transparency Platform for the NL bidding zone 10YNL----------L (the
@@ -62,7 +62,7 @@ const DAY_MS = 86_400_000;
 async function fetchYear(year) {
   const start = `${year}-01-01`;
   const end = year === LAST_YEAR ? `${now.toISOString().slice(0, 10)}` : `${year}-12-31`;
-  // One request at a time, per the pacing rule — never concurrent.
+  // One request at a time, per the pacing rule; never concurrent.
   const price = await fetchJsonPaced(ecUrl("/v2/price", { bzn: "NL", start, end }), { label: `price ${year}` });
   const cbpf = await fetchJsonPaced(ecUrl("/v2/cbpf", { country: ZONE, start, end }), { label: `cbpf ${year}` });
   const weather = await fetchOpenMeteo(
@@ -158,7 +158,7 @@ async function main() {
   const risk = riskFromSamples(samples, window);
   const profiles = profilesFromSamples(samples, 30);
 
-  // Next-day prices (widget); may 404 before ~13:00 CET — non-critical.
+  // Next-day prices (widget); may 404 before ~13:00 CET (non-critical).
   const nextDay = await fetchJsonPaced(ecUrl("/v2/price_next_day", { bzn: "NL" }), {
     label: "price_next_day",
     fresh: true,

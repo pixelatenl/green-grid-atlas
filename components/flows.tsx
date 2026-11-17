@@ -65,7 +65,7 @@ function FlowTimeline({ neighbor }: { neighbor: string }) {
         <title>{`${label}: daily mean flow, trailing 12 months. Range ${formatNumber(min, 1)} to ${formatNumber(max, 1)} GW (imports positive, exports negative), mean ${formatNumber(mean, 1)} GW.`}</title>
       </path>
       <text x={PAD} y={12} className="fill-muted-foreground" fontSize="9">
-        {label} — daily mean GW ({formatNumber(min, 0)} … {formatNumber(max, 0)})
+        {label}: daily mean GW ({formatNumber(min, 0)} … {formatNumber(max, 0)})
       </text>
     </svg>
   );
@@ -138,7 +138,7 @@ export function Flows() {
   return (
     <FamilySection
       title="Where power flows"
-      description="Cross-border physical flows (cbpf) between the Netherlands and its neighbors, in GW. Imports are positive, exports negative — that sign convention is the source's and is disclosed here."
+      description="Cross-border physical flows (cbpf) between the Netherlands and its neighbors, in GW. Imports are positive, exports negative; that sign convention is the source's and is disclosed here."
     >
       <div className="grid gap-4 sm:grid-cols-2">
         {neighbors.map((n) => (

@@ -312,7 +312,7 @@ export function AtlasHeatmap() {
         Colour spans the 5th–95th percentile of the displayed{" "}
         {layerDef.label.toLowerCase()} values
         {bounds ? ` (${layerDef.format(bounds.lo)} – ${layerDef.format(bounds.hi)})` : ""}. Grey cells are gaps (no
-        data). {layer === "intensity" ? "Basis: generation mix — imports not attributed." : ""}
+        data). {layer === "intensity" ? "Basis: generation mix, imports not attributed." : ""}
       </p>
 
       {/* grid */}
@@ -441,9 +441,9 @@ export function AtlasHeatmap() {
               {inBand(activeRow, active.col, redBand) && <p className="text-gg-red-band">Red hour band</p>}
               {weatherOnEffective && activeRow.weather && activeSrc >= 0 && (
                 <p className="mt-1 text-muted-foreground">
-                  Wind {activeRow.weather.wind[activeSrc] != null ? `${activeRow.weather.wind[activeSrc]!.toFixed(1)} km/h` : "—"},
-                  solar {activeRow.weather.solar[activeSrc] != null ? `${Math.round(activeRow.weather.solar[activeSrc]!)} W/m²` : "—"},
-                  temp {activeRow.weather.temp[activeSrc] != null ? `${activeRow.weather.temp[activeSrc]!.toFixed(1)} °C` : "—"}
+                  Wind {activeRow.weather.wind[activeSrc] != null ? `${activeRow.weather.wind[activeSrc]!.toFixed(1)} km/h` : "n/a"},
+                  solar {activeRow.weather.solar[activeSrc] != null ? `${Math.round(activeRow.weather.solar[activeSrc]!)} W/m²` : "n/a"},
+                  temp {activeRow.weather.temp[activeSrc] != null ? `${activeRow.weather.temp[activeSrc]!.toFixed(1)} °C` : "n/a"}
                 </p>
               )}
             </>
@@ -453,7 +453,7 @@ export function AtlasHeatmap() {
 
       {/* legend */}
       <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-        <span>{bounds ? layerDef.format(bounds.lo) : "—"}</span>
+        <span>{bounds ? layerDef.format(bounds.lo) : "n/a"}</span>
         <div
           aria-hidden="true"
           className="h-2 flex-1 rounded-full"
@@ -461,7 +461,7 @@ export function AtlasHeatmap() {
             background: `linear-gradient(to right, ${dark ? layerDef.stops.dark[0] : layerDef.stops.light[0]}, ${dark ? layerDef.stops.dark[1] : layerDef.stops.light[1]})`,
           }}
         />
-        <span>{bounds ? layerDef.format(bounds.hi) : "—"}</span>
+        <span>{bounds ? layerDef.format(bounds.hi) : "n/a"}</span>
         <span className="ml-2 inline-flex items-center gap-1">
           <span aria-hidden="true" className="inline-block size-2 rounded-full border-2 border-gg-green-band" /> green window
         </span>

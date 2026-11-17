@@ -38,7 +38,7 @@ export default function Home() {
               {days} days of hourly grid data, from day-ahead prices to per-neighbor power flows.{" "}
               {band ? (
                 <>
-                  Right now the answer is usually <strong>{formatBand(band)}</strong> — on{" "}
+                  Right now the answer is usually <strong>{formatBand(band)}</strong>, on{" "}
                   {formatNumber(gw.green.frequencyShare * 100, 0)}% of the trailing {gw.green.days} days.
                 </>
               ) : (
@@ -55,7 +55,7 @@ export default function Home() {
 
       <FamilySection
         title={`The atlas: every hour since ${snapshot.composites.years[0]?.year}`}
-        description="Hour by day, what the Dutch grid cost, how renewable it was, and how carbon-heavy — switch layers, periods and the weather overlay. Green outlines mark the green window band, red outlines the red hours."
+        description="Hour by day, what the Dutch grid cost, how renewable it was, and how carbon-heavy: switch layers, periods and the weather overlay. Green outlines mark the green window band, red outlines the red hours."
       >
         <AtlasHeatmap />
       </FamilySection>
@@ -78,7 +78,7 @@ export default function Home() {
           <code className="rounded bg-muted px-1">
             &lt;iframe src="{FAMILY.siteUrl}/widget" width="420" height="260"&gt;&lt;/iframe&gt;
           </code>
-          . Copy on the widget says snapshot-fresh daily — it is never live.
+          . Copy on the widget says snapshot-fresh daily; it is never live.
         </p>
       </FamilySection>
     </div>

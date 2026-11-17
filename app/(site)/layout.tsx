@@ -13,7 +13,7 @@ import { formatBand } from "@/grid/green-window";
 */
 const band = snapshot.greenWindow.green.modalBand;
 const GREEN_WINDOW_TEXT = band
-  ? `The green window — the recurring cheap-and-clean hours — is currently ${formatBand(band)}, on ${formatNumber(snapshot.greenWindow.green.frequencyShare * 100, 0)}% of the trailing ${snapshot.greenWindow.green.days} days.`
+  ? `The green window (the recurring cheap-and-clean hours) is currently ${formatBand(band)}, on ${formatNumber(snapshot.greenWindow.green.frequencyShare * 100, 0)}% of the trailing ${snapshot.greenWindow.green.days} days.`
   : "The recurring cheap-and-clean hours of the Dutch grid, computed daily from open data.";
 
 const SITE_TITLE = `${FAMILY.productName} | ${FAMILY.organization}`;

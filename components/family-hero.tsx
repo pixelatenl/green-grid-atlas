@@ -7,7 +7,7 @@ import { formatDate } from "@/format-date";
  * and deck are nodes so the product owns every word and every accent
  * span inside them; accent spans use the family brand token
  * (text-brand-accent). Every figure in the copy is computed from the
- * product's data at render time — never a hardcoded literal.
+ * product's data at render time, never a hardcoded literal.
  */
 export function FamilyHero({
   kicker,

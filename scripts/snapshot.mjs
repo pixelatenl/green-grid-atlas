@@ -1,5 +1,5 @@
 /*
-  Daily snapshot run (cron 12:35 UTC — lands after the day-ahead publication
+  Daily snapshot run (cron 12:35 UTC, lands after the day-ahead publication
   around 13:00 CET in both DST states):
 
     node --experimental-strip-types scripts/snapshot.mjs

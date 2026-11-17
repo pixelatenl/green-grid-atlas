@@ -56,7 +56,7 @@ export default function WidgetPage() {
       </h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {gw
-          ? `Cheap and renewable on ${Math.round(gw.green.frequencyShare * 1000) / 10}% of the trailing ${gw.green.days} days. Snapshot-fresh as of ${snap?.retrievedAt.slice(0, 10)} — daily, never live.`
+          ? `Cheap and renewable on ${Math.round(gw.green.frequencyShare * 1000) / 10}% of the trailing ${gw.green.days} days. Snapshot-fresh as of ${snap?.retrievedAt.slice(0, 10)} (daily, never live).`
           : error
             ? "Snapshot unavailable right now."
             : "Loading snapshot…"}
@@ -65,7 +65,7 @@ export default function WidgetPage() {
       {nextDay && prices.length > 0 && (
         <div className="mt-4">
           <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-            Tomorrow&apos;s price shape{nextDay.deliveryDate ? ` — ${nextDay.deliveryDate}` : ""} (EUR/MWh)
+            Tomorrow&apos;s price shape{nextDay.deliveryDate ? `: ${nextDay.deliveryDate}` : ""} (EUR/MWh)
           </p>
           <div
             className="mt-1 flex h-24 items-end gap-[1px] rounded-lg border border-border p-1"
@@ -83,7 +83,7 @@ export default function WidgetPage() {
                   aria-label={`Quarter hour ${i}: ${v != null ? `${v.toFixed(2)} EUR/MWh` : "no data"}`}
                 >
                   {/* single string child: array children SSR empty and break hydration */}
-                  <title>{`${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")} — ${v != null ? `${v.toFixed(2)} EUR/MWh` : "no data"}`}</title>
+                  <title>{`${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}; ${v != null ? `${v.toFixed(2)} EUR/MWh` : "no data"}`}</title>
                 </div>
               );
             })}

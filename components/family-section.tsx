@@ -7,7 +7,7 @@ import {
 
 /**
  * The family section heading pattern: the display heading of a data
- * section — primary token in light, white in dark — with the heavy
+ * section: primary token in light, white in dark, with the heavy
  * weight and tight tracking the family pages use.
  */
 export function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -25,7 +25,7 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
  * section shape the body (a flex column, for instance) without
  * reopening the container markup. The children are the visual itself;
  * every figure rendered around it is computed from the product's data
- * at render time — never a hardcoded literal.
+ * at render time, never a hardcoded literal.
  */
 export function FamilySection({
   title,

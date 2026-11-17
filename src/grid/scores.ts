@@ -8,7 +8,7 @@
  * 0.5 × share of days with renewable share ≥ 50%, scaled to 0-100
  * (clamped; the mean share itself can exceed 100% in exporter zones).
  * Basis: renewable share of LOAD (what consumption is served with), not of
- * generation — imports included on the consumption side. Null days are
+ * generation; imports included on the consumption side. Null days are
  * skipped, never counted as zero.
  */
 

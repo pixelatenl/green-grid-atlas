@@ -58,7 +58,7 @@ export function Coda() {
     <FamilySection
       title={
         <>
-          The extremes — <span className="text-brand-accent">best and worst of the record</span>
+          The extremes: <span className="text-brand-accent">best and worst of the record</span>
         </>
       }
       description="The dirtiest and cleanest hours ever recorded on the Dutch grid, then the full record set."
@@ -67,22 +67,22 @@ export function Coda() {
         <div className="rounded-xl border border-gg-red-band/50 bg-gg-red-band-soft p-4">
           <p className="text-xs font-semibold tracking-widest text-gg-red-band uppercase">Dirtiest hour on record</p>
           <p className="mt-1 text-3xl font-black tabular-nums tracking-tight">
-            {dirtiest ? formatNumber(dirtiest.value, 0) : "—"}
+            {dirtiest ? formatNumber(dirtiest.value, 0) : "n/a"}
             <span className="ml-1 text-sm font-semibold text-muted-foreground">g CO2-eq/kWh</span>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {dirtiest?.localLabel} — computed intensity, generation-mix basis (imports not attributed)
+            {dirtiest?.localLabel}: computed intensity, generation-mix basis (imports not attributed)
           </p>
           <MixBar mix={dirtiest?.mix} />
         </div>
         <div className="rounded-xl border border-gg-green-band/50 bg-gg-green-band-soft p-4">
           <p className="text-xs font-semibold tracking-widest text-gg-green-band uppercase">Cleanest hour on record</p>
           <p className="mt-1 text-3xl font-black tabular-nums tracking-tight">
-            {cleanest ? formatNumber(cleanest.value, 0) : "—"}
+            {cleanest ? formatNumber(cleanest.value, 0) : "n/a"}
             <span className="ml-1 text-sm font-semibold text-muted-foreground">g CO2-eq/kWh</span>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {cleanest?.localLabel} — computed intensity, generation-mix basis (imports not attributed)
+            {cleanest?.localLabel}: computed intensity, generation-mix basis (imports not attributed)
           </p>
           <MixBar mix={cleanest?.mix} />
         </div>
@@ -100,7 +100,7 @@ export function Coda() {
         So, when is the greenest hour on the Dutch grid?{" "}
         {band ? (
           <>
-            Usually <strong>{formatBand(band)}</strong> — cheap and renewable at once. The atlas above has every
+            Usually <strong>{formatBand(band)}</strong>: cheap and renewable at once. The atlas above has every
             hour since {snapshot.composites.years[0]?.year} to back that up.
           </>
         ) : (

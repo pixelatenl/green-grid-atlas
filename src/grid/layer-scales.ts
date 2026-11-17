@@ -1,7 +1,7 @@
 /**
  * Heatmap layer scales. The hex stops are the code copy of the product
  * tokens appended in app/globals.css (light theme values; the dark theme is
- * derived by interpolating toward the dark stops — both palettes are listed
+ * derived by interpolating toward the dark stops; both palettes are listed
  * per layer so rendering needs no CSS reads). Colour spans the 5th–95th
  * percentile of the displayed values; null renders as a gap.
  */

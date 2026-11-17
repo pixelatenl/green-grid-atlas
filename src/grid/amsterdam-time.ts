@@ -109,7 +109,7 @@ export function dayKey(utcMs: number): string {
 /**
  * Classify a local day's DST shape from its slot count: 23-hour spring day,
  * 25-hour fall day, otherwise normal. The count is the actual number of
- * distinct (hour, offset) slots — never an assumed 24.
+ * distinct (hour, offset) slots, never an assumed 24.
  */
 export function dstShape(hourCount: number): "spring" | "fall" | "normal" {
   if (hourCount === 23) return "spring";

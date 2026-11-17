@@ -1,4 +1,4 @@
-# Emission factors — computed carbon intensity
+# Emission factors: computed carbon intensity
 
 Versioned artifact: **`ipcc-ar5-wg3-annex3-medians-v1`** (stamped into
 `snapshot.json` as `emissionFactorsVersion`; the code copy lives in
@@ -6,8 +6,8 @@ Versioned artifact: **`ipcc-ar5-wg3-annex3-medians-v1`** (stamped into
 
 Default set: **IPCC, 2014: Climate Change 2014: Mitigation of Climate Change.
 Contribution of Working Group III to the Fifth Assessment Report, Annex III,
-Table A.III.2 — lifecycle emission medians (g CO2-eq/kWh)**.
-Source: https://www.ipcc.ch/report/ar5/wg3/ — IPCC AR5 is published open
+Table A.III.2: lifecycle emission medians (g CO2-eq/kWh)**.
+Source: https://www.ipcc.ch/report/ar5/wg3/; IPCC AR5 is published open
 access under **Creative Commons Attribution-NonCommercial-ShareAlike 3.0 IGO
 (CC BY-NC-SA 3.0 IGO)**, https://creativecommons.org/licenses/by-nc-sa/3.0/igo/.
 

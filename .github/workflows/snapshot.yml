@@ -7,7 +7,7 @@ name: Refresh data snapshot
 # ENTSO-E per-type data, all other zones on the first run of each ISO week
 # from their unchanged energy-charts feed). Writes public/data/snapshot.json
 # and commits it to main, which triggers the build workflow. The backfill
-# (scripts/backfill.mjs) NEVER runs here — it is a one-time local/mini-PC or
+# (scripts/backfill.mjs) NEVER runs here; it is a one-time local/mini-PC or
 # one-off dispatched job.
 #
 # 12:35 UTC lands after the day-ahead publication (~13:00 CET) in both DST

@@ -87,7 +87,7 @@ function allSeries(envelope) {
 
 /**
  * Merge hourly envelopes into one slot map keyed by (local date, local
- * hour, UTC offset) — the DST-safe key from src/grid/amsterdam-time.ts.
+ * hour, UTC offset), the DST-safe key from src/grid/amsterdam-time.ts.
  */
 export function slotsFromEnvelopes({ priceEnv, powerEnv, cbpfEnv }) {
   const priceSlots = bucketHours(valuesOf(priceEnv, "day_ahead_price"));
@@ -263,10 +263,13 @@ export function buildCompositesForYear(yearDays) {
 /* ---------------- per-year flow volumes (TWh) ---------------- */
 
 /**
- * Per-neighbor import/export volumes per year from hourly cbpf (GW, imports
- * positive, exports negative — disclosed on the card). importTWh sums the
- * positive hours, exportTWh the absolute value of the negative hours, net
- * is their signed sum; the national total is the sum series.
+ * Per-neighbor import/export volumes per year from hourly cbpf. Conversion
+ * chain: each hourly value is a mean physical flow in GW, so GW x 1 h
+ * accumulates GWh, and GWh / 1,000 gives TWh (1 TWh = 1,000 GWh). Sign
+ * convention: imports positive, exports negative, disclosed on the card.
+ * importTWh sums the positive hours, exportTWh the absolute value of the
+ * negative hours, net is their signed sum; the national total is the sum
+ * series.
  */
 export function buildFlowVolumes(yearDays) {
   const neighbors = {};
@@ -284,8 +287,8 @@ export function buildFlowVolumes(yearDays) {
   }
   const out = {};
   for (const n of FLOW_SERIES) {
-    const importTWh = neighbors[n].importGWh / 1e6;
-    const exportTWh = neighbors[n].exportGWh / 1e6;
+    const importTWh = neighbors[n].importGWh / 1e3;
+    const exportTWh = neighbors[n].exportGWh / 1e3;
     out[n] = {
       importTWh: roundForStorage(importTWh, 2),
       exportTWh: roundForStorage(exportTWh, 2),
@@ -421,7 +424,7 @@ export function recordsFromSamples(samples) {
 /**
  * Daily renewable share of load (percent) per Amsterdam-local day, computed
  * from ENTSO-E A75/A65 hourly slots as the mean of the hourly renewable
- * share of load — the same daily-average definition the energy-charts
+ * share of load, the same daily-average definition the energy-charts
  * ren_share_daily_avg feed uses for the other zones (verified against its
  * per-type feeds, see docs/data-notes.md). Input: hour slots (bucketHours
  * output) whose values carry renewable_share_of_load. Returns the daily

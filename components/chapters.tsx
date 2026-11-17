@@ -8,7 +8,7 @@ import { WINDOW_PARAMS } from "@/grid/green-window";
   The four chapters: the morning gas ramp, the daylight renewables valley,
   the evening peak, the wind night. Each is a derived headline sentence (every figure
   computed at render time from the snapshot's trailing-30-day average day
-  profiles) plus its evidence visual — a 24-hour profile chart, pure SVG,
+  profiles) plus its evidence visual: a 24-hour profile chart, pure SVG,
   bars keyboard-focusable with per-bar labels.
 */
 
@@ -76,7 +76,7 @@ function DayProfile({
         const height = valid ? (v / max) * (H - PAD * 2 - 14) : 0;
         // <title> renders only a single string child; array children SSR
         // empty and come back full on the client, breaking hydration.
-        const label = `${hh(h)} — ${seriesLabel}: ${valid ? `${formatNumber(v, 0)} ${seriesUnit}` : "no data"}`;
+        const label = `${hh(h)}; ${seriesLabel}: ${valid ? `${formatNumber(v, 0)} ${seriesUnit}` : "no data"}`;
         return (
           <rect
             key={h}
@@ -194,7 +194,7 @@ export function Chapters() {
           <>
             Daylight renewables peak at <span className="tabular-nums">{formatNumber(daylightRenewablesPeak.value, 0)} MW</span> around{" "}
             {hh(daylightRenewablesPeak.hour)}, and the average day-ahead price bottoms at{" "}
-            <span className="tabular-nums">{formatNumber(priceMin.value, 1)} EUR/MWh</span> at {hh(priceMin.hour)} —
+            <span className="tabular-nums">{formatNumber(priceMin.value, 1)} EUR/MWh</span> at {hh(priceMin.hour)},
             the heart of the green window.
           </>
         }
@@ -213,7 +213,7 @@ export function Chapters() {
       <Chapter
         id="eveningPeak"
         title="The evening peak"
-        description="Demand tops out in the evening; prices follow and imports fill the gap — the red-hours territory."
+        description="Demand tops out in the evening; prices follow and imports fill the gap: the red-hours territory."
         headline={
           <>
             Load peaks at <span className="tabular-nums">{formatNumber(loadPeak.value, 0)} MW</span> at{" "}

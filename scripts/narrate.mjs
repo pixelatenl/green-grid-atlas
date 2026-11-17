@@ -10,7 +10,7 @@
   prose-ratio lint, every numeral in the returned text must appear in the
   context figures, at most two calls per visual, hard cap 16 calls per run,
   fail-soft (a failed visual simply stays hidden). Key from
-  process.env.MISTRAL_API_KEY only — never logged, never written to disk.
+  process.env.MISTRAL_API_KEY only; never logged, never written to disk.
 */
 
 import {
