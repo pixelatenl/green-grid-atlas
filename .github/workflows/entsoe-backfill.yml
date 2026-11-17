@@ -15,6 +15,10 @@ name: ENTSO-E NL probe and one-off backfill
 #     public/data/snapshot.json to the source branch (the PR head branch,
 #     or the dispatched ref).
 #
+# Out-of-path pull requests skip the probe (visual-only changes cannot
+# affect data integrity); workflow_dispatch remains the manual route for
+# a probe or backfill on any ref.
+#
 # If any probe criterion fails, the backfill does not run and the figures are
 # reported in the PR description instead. The token is read only from the
 # ENTSOE_API_TOKEN secret and is never logged, echoed or committed.
@@ -22,6 +26,10 @@ name: ENTSO-E NL probe and one-off backfill
 on:
   pull_request:
     types: [opened, synchronize, labeled]
+    paths:
+      - "scripts/**"
+      - "src/grid/**"
+      - ".github/workflows/entsoe-backfill.yml"
   workflow_dispatch:
     inputs:
       mode:
