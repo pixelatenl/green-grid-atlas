@@ -31,7 +31,7 @@ export default function RootLayout({
   /*
     Theme bootstrap: React Float hoists this into the initial HTML <head> as
     a <script src>, so it runs before first paint (no flash of the wrong
-    theme) without rendering a <script> element in the React tree — such an
+    theme) without rendering a <script> element in the React tree: such an
     element is never executed when React client-renders, which is what the
     dev console warning was about. The switcher also re-applies the stored
     theme on mount as a backstop.

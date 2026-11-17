@@ -1,4 +1,4 @@
-# Data notes — Green Grid Atlas
+# Data notes: Green Grid Atlas
 
 Documentation-first: every pipeline decision below was verified against the
 live sources on **13 November 2026** (probes run from this repo's Phase 0).
@@ -26,7 +26,7 @@ when a source changes its contract; record the change here with a date.
   midnight to last minute), or unix seconds. Empty `start` defaults to today;
   empty `end` to `start`. A full-year range in one request works
   (2025 price = 15,387 records, ~1.2 MB; `resolution` is null there because
-  2025 mixes PT1H and PT15M — always infer resolution per record from
+  2025 mixes PT1H and PT15M; always infer resolution per record from
   timestamp spacing, never from the envelope field).
 
 ### Resolution and coverage, NL (measured 2026-11-13)
@@ -36,11 +36,11 @@ when a source changes its contract; record the change here with a date.
 | `/v2/price?bzn=NL` | PT15M from at least 2025-10-01 (2025-09-15 is PT1H; boundary pinned between 2025-09-15 and 2025-10-01) | PT1H from 2015-01-05 (verified 2015-01-05..10, 2015-06-01, 2020-06-01, 2024-01-01, 2025-06-01) |
 | `/v2/public_power?country=nl` | PT15M (2026-11-10..13: 369 records, until 20:00 today; 2025-06-01 already PT15M) | PT1H (2015-06-01 verified, 24 records) |
 | `/v2/cbpf?country=nl` | PT15M (370 records for 2026-11-10..13) | PT15M since at least 2015-06-01 (96 records) |
-| `/v2/price_next_day?bzn=NL` | PT15M, 96 records for the next local day; `attributes.delivery_date`; HTTP 404 while tomorrow's auction is unpublished (typically early afternoon CET) | — |
+| `/v2/price_next_day?bzn=NL` | PT15M, 96 records for the next local day; `attributes.delivery_date`; HTTP 404 while tomorrow's auction is unpublished (typically early afternoon CET) | n/a |
 
 - Recent-window price probe (Phase 0 item 1), `bzn=NL&start=2026-11-10&end=2026-11-13`:
   **PT15M**, 384 records, `available_from 2026-11-10T00:00:00+01:00`,
-  `available_until 2026-11-13T23:45:00+01:00` (today included in full —
+  `available_until 2026-11-13T23:45:00+01:00` (today included in full;
   day-ahead is published a day ahead), zero nulls, zero gaps, unit
   `EUR / MWh`, series id `day_ahead_price`. Note: the appendix's "PT1H" for
   the recent window is outdated; recent is PT15M. The pipeline normalizes
@@ -64,7 +64,7 @@ when a source changes its contract; record the change here with a date.
   time; a day column count equals the day's actual hour count (23/24/25);
   the doubled fall-back hour renders as two explicitly labelled columns
   (02:00 CEST and 02:00 CET), the missing spring-forward hour as a visible
-  gap — never silently shifted. See `src/grid/amsterdam-time.ts`.
+  gap, never silently shifted. See `src/grid/amsterdam-time.ts`.
 
 ## 2. Attribution and license (energy-charts.info)
 
@@ -90,7 +90,7 @@ mirrored in `/llms-full.txt`) say, verbatim:
   `https://energy-charts.info/publishing-notes.html`; contact:
   `https://energy-charts.info/contact.html`.
 - Attribution line used in the footer credits zone (verbatim):
-  **"Data: energy-charts.info (Fraunhofer ISE), CC BY 4.0 — day-ahead prices
+  **"Data: energy-charts.info (Fraunhofer ISE), CC BY 4.0; day-ahead prices
   CC BY 4.0 from Bundesnetzagentur | SMARD.de"** with links
   https://energy-charts.info and https://creativecommons.org/licenses/by/4.0/.
 
@@ -109,7 +109,7 @@ mirrored in `/llms-full.txt`) say, verbatim:
   DST switch days too (2015-10-25 fall-back returns 24 slots 00:00–23:00), so
   the weather overlay joins to the grid on (local date, local hour) and never
   fabricates a 25th hour; on fall-back days the two 02:00 grid columns share
-  the single 02:00 weather value. Overlay only — never blocks the card.
+  the single 02:00 weather value. Overlay only, never blocks the card.
 - License (open-meteo.com/en/licence, checked 2026-11-13): all API data is
   licensed **CC BY 4.0** ("Attribution"), attribution to Open-Meteo; weather
   model data from national agencies under their open licenses. Terms:
@@ -130,7 +130,7 @@ mirrored in `/llms-full.txt`) say, verbatim:
   `Retry-After` header, in seconds) and cache results on your side."
 - Measured from this network, 2026-11-13 (Phase 0 item 4):
   - A second back-to-back request to `/v2/price` returns **HTTP 429** with
-    `Retry-After: 20` and body "Too Many Requests" — the first request alone
+    `Retry-After: 20` and body "Too Many Requests"; the first request alone
     was fine.
   - Spaced probes: at 2 s spacing, 6 of 15 requests succeeded; at 5 s, 7 of
     10; at 10 s, 7 of 8 (one 429 mid-run). The token bucket refills at
@@ -167,17 +167,17 @@ other zone keeps its energy-charts feed.
 
 - Endpoint: `https://web-api.tp.entsoe.eu/api`, GET only, XML response. Authentication via the
   `securityToken` query parameter, read from the `ENTSOE_API_TOKEN` environment variable (Actions
-  repository secret; never logged, never cached to disk, never committed — the disk-cache keys in
+  repository secret; never logged, never cached to disk, never committed; the disk-cache keys in
   `scripts/lib-entsoe.mjs` are built from the document parameters only).
 - Actual generation per production type: `documentType=A75`, `processType=A16` (realised),
   `in_Domain=10YNL----------L` (NL bidding zone EIC). One `TimeSeries` per `psrType`; `Period` carries
   `timeInterval` (start/end, UTC) and `resolution` (PT60M/PT15M); `Point` carries 1-based `position` and
   `quantity` in MW (`quantity_Measure_Unit.name` = MAW). Actual total load: `documentType=A65`,
   `processType=A16`, `outBiddingZone_Domain=10YNL----------L` (the load document requires
-  `outBiddingZone_Domain`; generation takes `in_Domain` — both verified against the live API in the
+  `outBiddingZone_Domain`; generation takes `in_Domain`; both verified against the live API in the
   probe gate). The series element is capitalized `TimeSeries` with `psrType` nested under `MktPSRType`.
   Note: the `A69`/`A01` pair named in the original change request is the wind-and-solar day-ahead
-  forecast (businessType A93/A94) — it returns only B16/B18/B19 and its NL solar sums to roughly a
+  forecast (businessType A93/A94); it returns only B16/B18/B19 and its NL solar sums to roughly a
   third of the CBS figure; the probe gate records those numbers as an appendix. `A75`/`A16` is the
   actual per-type document.
 - Window parameters `periodStart`/`periodEnd` as `yyyyMMddHHmm` in UTC; maximum one year per request
@@ -204,7 +204,7 @@ other zone keeps its energy-charts feed.
   over all its series), and dedups per (psrType, timestamp) with the preference chain docStatus A05 →
   higher revisionNumber → record from the block with the greater total coverage → finer resolution →
   first in document order. The block preference is a completeness preference, never a value comparison:
-  the complete collection is the authoritative full accounting, the partial collection is a subset feed —
+  the complete collection is the authoritative full accounting, the partial collection is a subset feed,
   the same family of structural preference as docStatus A05 or a higher revision number. The parser also
   reports, BEFORE dedup, per-psrType copy statistics (per TimeSeries copy: block, point count, first/last
   timestamp, mean MW over the copy's own covered timestamps, energy in GWh; per psrType: how many
@@ -215,7 +215,7 @@ other zone keeps its energy-charts feed.
   - coherence ratio band **0.6-1.4**: total generation energy / total load energy, computed only over
     timestamps where generation data exists. Derivation: Dutch annual generation has been roughly
     85-105% of load (CBS, record production and record exports in 2025), while the degraded variant
-    observed in runs 43975014678/44049087239 sits at 0.28-0.32 — far outside any honest window. With the
+    observed in runs 43975014678/44049087239 sits at 0.28-0.32, far outside any honest window. With the
     block preference in place the ratio lands in band deterministically; a ratio failure now means
     genuinely incoherent serving, and failing legibly is the correct outcome.
   - materiality floor **50 MW**: per-copy divergence is REPORTED as evidence (never gated) only for
@@ -230,10 +230,10 @@ other zone keeps its energy-charts feed.
     entsoeFetch criterion fails with a legible reason and the stop rule applies. Copies are never summed,
     versions are never mixed across retries, there is never a fallback to another data source. If the two
     blocks ever tie in total coverage, the chain falls through to finer resolution and then document
-    order, so the attempt may draw either version; the ratio band then catches a degraded draw legibly —
+    order, so the attempt may draw either version; the ratio band then catches a degraded draw legibly,
     a structural misfire fails loudly, it never ships silently.
   - coverage (the fraction of the window's load-bearing timestamps that also carry generation data) is
-    reported per window and per attempt but NOT gated — the probe criteria catch undercoverage, and the
+    reported per window and per attempt but NOT gated; the probe criteria catch undercoverage, and the
     daily snapshot's fresh windows legitimately tolerate sparse coverage at the publication lag.
 - Timestamps are UTC interval starts (`...Z`). The pipeline converts them to Europe/Amsterdam through
   the shared `bucketHours`/`hourKey` path (a 25-hour fall-back day keeps both 02:00 slots, a 23-hour
@@ -262,7 +262,7 @@ other zone keeps its energy-charts feed.
   2025, PT15M): `renewable_share_of_generation` ≈ (biomass + waste + wind_onshore + wind_offshore +
   solar) / total generation, mean absolute difference about 1.3 percentage points (the served share is
   not exactly reproducible from the per-type feeds; the site keeps the served definition's composition,
-  and the ENTSO-E renewable set above matches it — hydro/geothermal for NL sit inside energy-charts'
+  and the ENTSO-E renewable set above matches it; hydro/geothermal for NL sit inside energy-charts'
   `others`, which the served share does not count as renewable). Residual load =
   `load − wind_onshore − wind_offshore − distribution_renewables` (mean absolute difference 0.04 MW on
   the 2025 cache).
@@ -290,7 +290,7 @@ other zone keeps its energy-charts feed.
 
 `src/data/snapshot.json` (generated, committed; see `src/data/snapshot.ts` for
 the typed view) carries: `retrievedAt`; trailing 12 months of hourly NL series
-(price, renewable_share_of_generation, computed intensity — rounded);
+(price, renewable_share_of_generation, computed intensity, rounded);
 per-year composites (per-year hour × month means per series); records;
 green window and red hours values; risk indicators; per-country score
 summaries; weather overlay; narration cache with SHA-256 context signatures.

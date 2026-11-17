@@ -48,11 +48,11 @@ export function EuropeScore() {
                   style={{ width: `${((c.score ?? 0) / max) * 100}%` }}
                 />
                 <span className="absolute inset-y-0 left-2 flex items-center text-[10px] font-semibold tabular-nums text-foreground">
-                  {c.score != null ? formatNumber(c.score, 1) : "—"}
+                  {c.score != null ? formatNumber(c.score, 1) : "n/a"}
                 </span>
               </span>
               <span className="w-24 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-                {c.meanSharePct != null ? `${formatNumber(c.meanSharePct, 1)}% ren.` : "—"}
+                {c.meanSharePct != null ? `${formatNumber(c.meanSharePct, 1)}% ren.` : "n/a"}
               </span>
             </li>
           );

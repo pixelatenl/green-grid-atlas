@@ -4,7 +4,7 @@ import type { RiskIndicator } from "@/grid/risk";
 
 /*
   The five derived risk indicators, chip pattern, honest framing: these are
-  indicators computed from open data — not a grid-security assessment. Each
+  indicators computed from open data, not a grid-security assessment. Each
   rule is rendered from the indicator's own rule text (stored in the
   snapshot, documented in the method drawer).
 */

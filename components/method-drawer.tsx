@@ -70,7 +70,7 @@ export function MethodDrawer() {
               <a href={s.openMeteo.licenseUrl} className="underline underline-offset-4 hover:text-foreground">CC BY 4.0</a>{" "}
               (see <a href={s.openMeteo.licencePage} className="underline underline-offset-4 hover:text-foreground">open-meteo.com/en/licence</a>).
               Retrieved {formatDate(s.retrievedAt)}. If the weather fetch fails, the overlay is omitted and the
-              card renders without it — it never blocks the page.
+              card renders without it; it never blocks the page.
             </li>
             {s.entsoe && (
               <li>
@@ -89,7 +89,7 @@ export function MethodDrawer() {
             )}
             <li>
               Emission factors: IPCC AR5 WGIII Annex III Table A.III.2 lifecycle medians, version{" "}
-              <code className="rounded bg-muted px-1 text-xs">{snapshot.emissionFactorsVersion}</code> — full
+              <code className="rounded bg-muted px-1 text-xs">{snapshot.emissionFactorsVersion}</code>: full
               per-factor table with sources and licenses in docs/emission-factors.md, code copy in
               src/grid/emission-factors.ts.
             </li>
@@ -125,7 +125,7 @@ export function MethodDrawer() {
             </p>
             <p className="mt-1">
               Fetch integrity: the platform serves each production type in two coexisting published blocks, so
-              the fetch layer deduplicates per type by block completeness (the more complete block wins — a
+              the fetch layer deduplicates per type by block completeness (the more complete block wins, a
               structural preference, never a value comparison) and verifies every accepted window against its
               load document: total generation energy must sit between 0.6 and 1.4 times the window's load
               energy (Dutch generation has been roughly 85–105% of load, per CBS), re-fetching the window
@@ -148,7 +148,7 @@ export function MethodDrawer() {
           <h3 className="font-semibold text-foreground">Basis disclosure (verbatim)</h3>
           <p className="mt-1">
             Computed carbon intensity uses the <strong>generation mix</strong>: domestic production types times the
-            emission-factor table, divided by load. <strong>Imports are not attributed</strong> — cross-border flows
+            emission-factor table, divided by load. <strong>Imports are not attributed</strong>: cross-border flows
             carry no fuel mix, so import-heavy hours show a lower computed intensity than the power actually
             consumed would cause. This limitation applies everywhere intensity is shown (the intensity layer
             label, the green window card captions, the coda).
@@ -182,7 +182,7 @@ export function MethodDrawer() {
           <h3 className="font-semibold text-foreground">DST rule (verbatim)</h3>
           <p className="mt-1">
             All grids render in Europe/Amsterdam local time. The two 23-hour and 25-hour days each year render
-            their actual hour count — 23 or 25 columns — with the missing spring-forward hour shown as an explicit
+            their actual hour count (23 or 25 columns), with the missing spring-forward hour shown as an explicit
             gap cell and the doubled fall-back 02:00 shown as two labelled columns (02:00 +02:00 and 02:00
             +01:00). Nothing is ever silently shifted.
           </p>
@@ -202,7 +202,7 @@ export function MethodDrawer() {
           <h3 className="font-semibold text-foreground">Suppression and gap rendering</h3>
           <p className="mt-1">
             Missing or suppressed source values are stored as null and rendered as grey gap cells with a "no
-            data" label — never as zero, never interpolated. The heatmap colour scale spans the 5th–95th
+            data" label, never as zero, never interpolated. The heatmap colour scale spans the 5th–95th
             percentile of the displayed values; the legend prints both ends.
           </p>
         </section>

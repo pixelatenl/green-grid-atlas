@@ -24,13 +24,13 @@ export function GreenWindowCard() {
           The <span className="text-brand-accent">green window</span>
         </>
       }
-      description={`The recurring hours when Dutch power is both cheap and clean — computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days, every figure below straight from the snapshot.`}
+      description={`The recurring hours when Dutch power is both cheap and clean, computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days, every figure below straight from the snapshot.`}
     >
       <p className="text-3xl font-black leading-[1.05] tracking-tight sm:text-5xl">
         {band ? (
           <>
             Most days, the greenest hours are{" "}
-            <span className="text-brand-accent">{formatBand(band)}</span> —
+            <span className="text-brand-accent">{formatBand(band)}</span>,
             on{" "}
             <span className="tabular-nums">{formatNumber(sharePct, 0)}%</span>{" "}
             of the last {gw.green.days} days.
@@ -58,7 +58,7 @@ export function GreenWindowCard() {
                 key={h}
                 className={`flex-1 border-r border-border/40 last:border-r-0 ${inBand ? "bg-gg-green-band-soft" : ""}`}
                 style={inBand ? { boxShadow: "inset 0 3px 0 var(--gg-green-band)" } : undefined}
-                title={`${String(h).padStart(2, "0")}:00${inBand ? " — green window" : ""}`}
+                title={`${String(h).padStart(2, "0")}:00${inBand ? " (green window)" : ""}`}
               />
             );
           })}

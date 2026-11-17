@@ -23,13 +23,13 @@ export function RedHoursCard() {
           The <span className="text-brand-accent">red hours</span>
         </>
       }
-      description={`The exact inverse of the green window rule, from the same code path: price at or above p${WINDOW_PARAMS.RED_PRICE_PERCENTILE} and renewable share at or below p${WINDOW_PARAMS.RED_RENEWABLE_PERCENTILE} — expensive and low-renewable at the same time.`}
+      description={`The exact inverse of the green window rule, from the same code path: price at or above p${WINDOW_PARAMS.RED_PRICE_PERCENTILE} and renewable share at or below p${WINDOW_PARAMS.RED_RENEWABLE_PERCENTILE} (expensive and low-renewable at the same time).`}
     >
       <p className="text-3xl font-black leading-[1.05] tracking-tight sm:text-5xl">
         {band ? (
           <>
             The priciest, dirtiest hours usually land at{" "}
-            <span className="text-brand-accent">{formatBand(band)}</span> — on{" "}
+            <span className="text-brand-accent">{formatBand(band)}</span>, on{" "}
             <span className="tabular-nums">{formatNumber(sharePct, 0)}%</span> of the last{" "}
             {gw.red.days} days.
           </>
@@ -40,7 +40,7 @@ export function RedHoursCard() {
       <p className="mt-3 max-w-[62ch] text-sm text-muted-foreground">
         Red means day-ahead price at or above {formatNumber(gw.percentiles.priceP70, 1)} EUR/MWh (p{WINDOW_PARAMS.RED_PRICE_PERCENTILE}
         of the trailing {WINDOW_PARAMS.TRAILING_DAYS} days) <span aria-hidden="true">AND</span> renewable share of
-        generation at or below {formatNumber(gw.percentiles.renP30, 1)}% (p{WINDOW_PARAMS.RED_RENEWABLE_PERCENTILE}) — the exact
+        generation at or below {formatNumber(gw.percentiles.renP30, 1)}% (p{WINDOW_PARAMS.RED_RENEWABLE_PERCENTILE}), the exact
         inverse of the green rule, computed by the same code, so the two can never contradict. Basis:
         renewable share of <strong>generation</strong> (NL generation mix).
       </p>
@@ -57,7 +57,7 @@ export function RedHoursCard() {
                 key={h}
                 className={`flex-1 border-r border-border/40 last:border-r-0 ${inBand ? "bg-gg-red-band-soft" : ""}`}
                 style={inBand ? { boxShadow: "inset 0 3px 0 var(--gg-red-band)" } : undefined}
-                title={`${String(h).padStart(2, "0")}:00${inBand ? " — red hours" : ""}`}
+                title={`${String(h).padStart(2, "0")}:00${inBand ? " (red hours)" : ""}`}
               />
             );
           })}

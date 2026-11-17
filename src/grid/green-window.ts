@@ -1,5 +1,5 @@
 /**
- * The green window rule — the product's signature. ONE documented rule,
+ * The green window rule, the product's signature. ONE documented rule,
  * shared by the green-window card, the red-hours mirror card and the
  * heatmap transition markers; green and red are computed by the SAME
  * function with inverted thresholds and comparators, so the pair can never
@@ -96,7 +96,7 @@ export function percentile(values: number[], p: number): number {
  * The one code path behind both sides: classify each day's wall-clock
  * hours with the given threshold/comparator pair, then extract contiguous
  * bands. Green calls it with (priceP30, "le", renP70, "ge"); red with
- * (priceP70, "ge", renP30, "le") — the exact inverse parameters.
+ * (priceP70, "ge", renP30, "le"): the exact inverse parameters.
  */
 function classifySide(
   hours: WindowHour[],

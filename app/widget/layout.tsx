@@ -6,7 +6,7 @@ import { FAMILY } from "@/family";
   main page. The widget renders without the family header and footer.
 */
 export const metadata: Metadata = {
-  title: `${FAMILY.productName} — widget`,
+  title: `${FAMILY.productName} | widget`,
   description:
     "Embeddable widget: the NL green window and tomorrow's day-ahead price shape, snapshot-fresh daily from the Green Grid Atlas. Never live.",
   alternates: {

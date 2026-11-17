@@ -51,7 +51,7 @@ export function SiteFooter() {
             </p>
           )}
           <p className="mt-1">
-            Data: energy-charts.info (Fraunhofer ISE), CC BY 4.0 — day-ahead prices CC BY 4.0 from
+            Data: energy-charts.info (Fraunhofer ISE), CC BY 4.0; day-ahead prices CC BY 4.0 from
             Bundesnetzagentur | SMARD.de; NL generation and load from the ENTSO-E Transparency Platform. Full
             method, licenses and rules in the method drawer.
           </p>

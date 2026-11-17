@@ -1,6 +1,6 @@
 /*
   Probe gate for the ENTSO-E NL substitution (Phase 1, one-off, runs in
-  Actions with the ENTSOE_API_TOKEN secret available — never part of the
+  Actions with the ENTSOE_API_TOKEN secret available, never part of the
   daily snapshot job):
 
     node --experimental-strip-types scripts/probe-entsoe.mjs
@@ -322,7 +322,7 @@ async function main() {
     detail: `B16+B20 aggregate ${Math.round(aggGWh)} GWh over the trailing ${Math.round(days)} days, annualized ${r1(aggTWhAnnualized)} TWh/yr (band ${ANNUAL_MIN_TWH}-${ANNUAL_MAX_TWH} TWh/yr = official solar 25.5 + official onshore wind 16.4 TWh with window slack; near 25 means distribution wind is missing, >= ${ANNUAL_MAX_TWH + 7} means a double count persists)`,
   };
 
-  // Criterion 3: diurnality across the trailing year — local midday mean vs
+  // Criterion 3: diurnality across the trailing year: local midday mean vs
   // local night mean of the aggregate (solar is the only diurnal component).
   const middayVals = [];
   const nightVals = [];

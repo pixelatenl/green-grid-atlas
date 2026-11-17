@@ -115,7 +115,7 @@ export const snapshot = raw as Snapshot;
 /** en-GB number formatting per the family derived-sentence convention. */
 export const nf = new Intl.NumberFormat("en-GB");
 export function formatNumber(v: number | null | undefined, digits = 0): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "n/a";
   return new Intl.NumberFormat("en-GB", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
@@ -123,7 +123,7 @@ export function formatNumber(v: number | null | undefined, digits = 0): string {
 }
 
 export function formatSigned(v: number | null | undefined, digits = 1): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "n/a";
   const s = formatNumber(v, digits);
   return v > 0 ? `+${s}` : s;
 }
