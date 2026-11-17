@@ -1,0 +1,94 @@
+name: ENTSO-E NL probe and one-off backfill
+
+# Probe gate and one-off backfill for the ENTSO-E NL substitution. NEVER
+# scheduled. Two ways in:
+#
+#   - pull_request (opened/synchronize/labeled) against main: runs the
+#     probe gate (scripts/probe-entsoe.mjs) with the ENTSOE_API_TOKEN secret
+#     and prints the full report to the job log; the figures are recorded in
+#     the PR description. If any acceptance criterion fails, this check fails.
+#   - labeling the PR "entsoe-backfill" (or workflow_dispatch with
+#     mode=backfill on any ref that carries this file): runs the probe
+#     gate first and, only if every criterion passes, runs the one-off
+#     backfill (scripts/backfill.mjs, full 2015-present history, which
+#     includes the trailing window) and commits the rebuilt
+#     public/data/snapshot.json to the PR head branch.
+#
+# If any probe criterion fails, the backfill does not run and the figures are
+# reported in the PR description instead. The token is read only from the
+# ENTSOE_API_TOKEN secret and is never logged, echoed or committed.
+
+on:
+  pull_request:
+    types: [opened, synchronize, labeled]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "probe: gate only; backfill: gate, then one-off backfill + commit"
+        required: true
+        type: choice
+        default: probe
+        options:
+          - probe
+          - backfill
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    # The probe gate runs on every pull_request event and on every dispatch
+    # (either mode), so that a mode=backfill dispatch is gated by the probe
+    # exactly like a labeled PR event (a skipped needed job would skip the
+    # backfill too).
+    if: >
+      github.event_name == 'pull_request'
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Probe gate (ENTSO-E NL)
+        id: probe
+        run: node --experimental-strip-types scripts/probe-entsoe.mjs
+        env:
+          ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
+  backfill:
+    needs: probe
+    if: >
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'backfill')
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'entsoe-backfill'))
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # pull_request events: the PR head sha; workflow_dispatch: the ref
+          # the workflow was dispatched on (the expression is empty for
+          # dispatch, so fall back to github.ref).
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: One-off backfill from ENTSO-E NL data
+        run: node --experimental-strip-types scripts/backfill.mjs
+        env:
+          ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      - name: Commit rebuilt snapshot to the PR head branch
+        run: |
+          git config user.name "green-grid-snapshot-bot"
+          git config user.email "actions@github.com"
+          git add public/data/snapshot.json
+          if git diff --cached --quiet; then
+            echo "No snapshot changes."
+          else
+            git commit -m "data: rebuild snapshot from ENTSO-E NL generation and load"
+            git push
+          fi

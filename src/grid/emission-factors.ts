@@ -15,11 +15,12 @@ export const EMISSION_FACTORS_VERSION = "ipcc-ar5-wg3-annex3-medians-v1";
 export interface EmissionFactor {
   /** Lifecycle emissions, g CO2-eq per kWh. */
   gCO2eqPerKWh: number;
-  /** What the energy-charts series id stands for. */
+  /** What the series id stands for. */
   label: string;
 }
 
-/** Keyed by energy-charts public_power series id. */
+/** Keyed by site series id (energy-charts public_power ids, plus the
+ *  ENTSO-E distribution_renewables aggregate for NL). */
 export const EMISSION_FACTORS: Record<string, EmissionFactor> = {
   fossil_hard_coal: { gCO2eqPerKWh: 820, label: "Hard coal" },
   fossil_gas: { gCO2eqPerKWh: 490, label: "Natural gas" },
@@ -29,7 +30,9 @@ export const EMISSION_FACTORS: Record<string, EmissionFactor> = {
   nuclear: { gCO2eqPerKWh: 12, label: "Nuclear" },
   wind_onshore: { gCO2eqPerKWh: 11, label: "Wind onshore" },
   wind_offshore: { gCO2eqPerKWh: 12, label: "Wind offshore" },
-  solar: { gCO2eqPerKWh: 46, label: "Solar PV" },
+  // ENTSO-E B16+B20: the TSO's single upscaled estimate of
+  // distribution-connected renewables; factored like solar PV (46).
+  distribution_renewables: { gCO2eqPerKWh: 46, label: "Distribution-connected renewables (TSO estimate)" },
 };
 
 /** Production series ids the intensity computation consumes. */

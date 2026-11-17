@@ -157,6 +157,135 @@ mirrored in `/llms-full.txt`) say, verbatim:
 - NL refreshes daily in the snapshot run; all other countries refresh on the
   first snapshot run of each week.
 
+## 6. ENTSO-E Transparency Platform, NL bidding zone (added 2026-11-16)
+
+The energy-charts NL solar series is defective: on 2026-06-15 its NL solar peak was 319.3 MW against a
+29.28 GW installed solar AC fleet (the same source's `/v2/installed_power`, latest `solar_ac` record), about
+1 percent, and it sums to roughly 0.48 TWh per year, while CBS reports 25.52 billion kWh of Dutch solar
+production in 2025 (provisional). NL generation and load therefore moved to ENTSO-E per-type data; every
+other zone keeps its energy-charts feed.
+
+- Endpoint: `https://web-api.tp.entsoe.eu/api`, GET only, XML response. Authentication via the
+  `securityToken` query parameter, read from the `ENTSOE_API_TOKEN` environment variable (Actions
+  repository secret; never logged, never cached to disk, never committed — the disk-cache keys in
+  `scripts/lib-entsoe.mjs` are built from the document parameters only).
+- Actual generation per production type: `documentType=A75`, `processType=A16` (realised),
+  `in_Domain=10YNL----------L` (NL bidding zone EIC). One `TimeSeries` per `psrType`; `Period` carries
+  `timeInterval` (start/end, UTC) and `resolution` (PT60M/PT15M); `Point` carries 1-based `position` and
+  `quantity` in MW (`quantity_Measure_Unit.name` = MAW). Actual total load: `documentType=A65`,
+  `processType=A16`, `outBiddingZone_Domain=10YNL----------L` (the load document requires
+  `outBiddingZone_Domain`; generation takes `in_Domain` — both verified against the live API in the
+  probe gate). The series element is capitalized `TimeSeries` with `psrType` nested under `MktPSRType`.
+  Note: the `A69`/`A01` pair named in the original change request is the wind-and-solar day-ahead
+  forecast (businessType A93/A94) — it returns only B16/B18/B19 and its NL solar sums to roughly a
+  third of the CBS figure; the probe gate records those numbers as an appendix. `A75`/`A16` is the
+  actual per-type document.
+- Window parameters `periodStart`/`periodEnd` as `yyyyMMddHHmm` in UTC; maximum one year per request
+  (`scripts/lib-entsoe.mjs` `entsoeWindows` chunks by year at most; the trailing 365-day window fits in
+  two requests per document type).
+- Rate limit: 400 requests/minute per IP and per token; a 429 imposes a ten-minute ban. The fetch layer
+  paces at one request per second, one at a time, and on 429 waits `Retry-After` (fallback 600 s) times
+  the attempt number, capped at 900 s, up to 4 attempts.
+- Dual-version platform responses and the fetch-layer integrity guard (added 2026-11-17, after probe runs
+  43975014678 and 44049087239): every A75 response carries each psrType in two `TimeSeries` blocks (in the
+  one-day documents two passes of ten series each, mRID 1-10 and 11-20, both PT15M, one block complete and
+  one partial), and the documents carry no `docStatus` and no `revisionNumber`. On 2026-11-17 the platform
+  served two conflicting versions of the same window minutes apart: a healthy variant (B20 summer peak
+  11,185 MW, 117-119 GWh/day, gas max 7,493 MW, B16+B20 35.9-39.2 TWh/yr, total 122.2 TWh) and a degraded
+  variant (B20 flat ~500-520 MW day and night, 12.3 GWh/day, gas ~123 MW at noon, 0.6 TWh/yr of gas, total
+  generation 33.7 TWh/yr against a healthy 118.7 TWh/yr A65 load document, coherence ratio 0.28). The
+  degraded variant is objectively false against the load document and the official statistics (CBS 2025:
+  solar 25.5, onshore wind 16.4, offshore 15.6 TWh), not a revised truth, so rejecting it is a coherence
+  judgment, not an editorial preference. Probe run 44049087239 then proved that BOTH versions coexist in
+  every A75 document (the two blocks are always served together, in either document order), which is what
+  motivated the structural block preference below. `parseEntsoeIntervals` groups the TimeSeries into
+  blocks (a repeat of a psrType already seen in the current block starts a new block; every series belongs
+  to exactly one block), computes each block's coverage (distinct timestamps covered by the block, summed
+  over all its series), and dedups per (psrType, timestamp) with the preference chain docStatus A05 →
+  higher revisionNumber → record from the block with the greater total coverage → finer resolution →
+  first in document order. The block preference is a completeness preference, never a value comparison:
+  the complete collection is the authoritative full accounting, the partial collection is a subset feed —
+  the same family of structural preference as docStatus A05 or a higher revision number. The parser also
+  reports, BEFORE dedup, per-psrType copy statistics (per TimeSeries copy: block, point count, first/last
+  timestamp, mean MW over the copy's own covered timestamps, energy in GWh; per psrType: how many
+  (psrType, timestamp) keys carry more than one record and how many of those carry differing values) and
+  the per-block coverage figures, so the preference is auditable. `fetchNlPowerEnvelope` guards every year
+  window with the coherence ratio as the SOLE gated check, with bounded fresh retries; the
+  fetch-integrity constants (NOT probe-gate criteria; never edited to make a run pass):
+  - coherence ratio band **0.6-1.4**: total generation energy / total load energy, computed only over
+    timestamps where generation data exists. Derivation: Dutch annual generation has been roughly
+    85-105% of load (CBS, record production and record exports in 2025), while the degraded variant
+    observed in runs 43975014678/44049087239 sits at 0.28-0.32 — far outside any honest window. With the
+    block preference in place the ratio lands in band deterministically; a ratio failure now means
+    genuinely incoherent serving, and failing legibly is the correct outcome.
+  - materiality floor **50 MW**: per-copy divergence is REPORTED as evidence (never gated) only for
+    psrTypes whose largest per-copy mean exceeds this floor. The ambiguity factor-2 gate of the first
+    version of this guard was WITHDRAWN: run 44049087239 proved that large per-copy divergences are the
+    normal serving pattern (both blocks always coexist), so a factor-2 divergence is not a defect signal
+    and such a gate rejects healthy documents.
+  - **3 attempts** per window: an attempt failing the coherence check re-fetches that window's A75
+    document fresh (bypassing the disk cache, paced as usual); the first passing attempt is kept. If no
+    attempt passes, the window is marked failed and surfaced with the full attempts table (per attempt:
+    ratio, per-type copy-divergence evidence, block coverage figures, coverage), so the probe's
+    entsoeFetch criterion fails with a legible reason and the stop rule applies. Copies are never summed,
+    versions are never mixed across retries, there is never a fallback to another data source. If the two
+    blocks ever tie in total coverage, the chain falls through to finer resolution and then document
+    order, so the attempt may draw either version; the ratio band then catches a degraded draw legibly —
+    a structural misfire fails loudly, it never ships silently.
+  - coverage (the fraction of the window's load-bearing timestamps that also carry generation data) is
+    reported per window and per attempt but NOT gated — the probe criteria catch undercoverage, and the
+    daily snapshot's fresh windows legitimately tolerate sparse coverage at the publication lag.
+- Timestamps are UTC interval starts (`...Z`). The pipeline converts them to Europe/Amsterdam through
+  the shared `bucketHours`/`hourKey` path (a 25-hour fall-back day keeps both 02:00 slots, a 23-hour
+  spring-forward day has none) and every build verifies the conversion hour-by-hour against the
+  unchanged energy-charts price series (`verifyHourAlignment`): every ENTSO-E hour key must exist in
+  the price series; price-only hours are a publication lag, not an error.
+- psrType → site series mapping (`PSR_TYPES` in `scripts/lib-entsoe.mjs`): B16 Solar and B20 Other
+  renewable → `distribution_renewables` (one aggregate series; see the composition decision below),
+  B19 Wind Onshore → `wind_onshore`, B18 Wind Offshore → `wind_offshore`, B01 Biomass → `biomass`,
+  B17 Waste → `waste`, B14 Nuclear → `nuclear`, B02/B05 → `fossil_hard_coal`, B03/B04 → `fossil_gas`,
+  everything else (hydro B10/B11/B12, geothermal B09, marine B13, oil/peat, other B15, unknown) →
+  `others`. The emission-factor table is keyed by site series ids; `distribution_renewables` carries the
+  solar PV median factor (46 g CO2-eq/kWh), the same value the old `solar` key carried.
+- Composition decision (product owner, 2026-11-16): for the NL zone the TSO reports solar plus other
+  distribution-connected renewables as a single upscaled estimate under B20, while B16 carries only the
+  small directly measured share; the missing onshore wind volume and the B20 excess are the same volume
+  (B19 annualizes low against the official onshore figure while B16+B20 runs high against the official
+  solar figure, and the implied renewable total matches). The site ships the aggregate as
+  `distribution_renewables`, honestly labeled, and never decomposes it; every component is renewable, so
+  the renewable share is unaffected.
+- Renewable set, computed explicitly from the A75 per-type series via the per-psrType renewable flags:
+  B16+B20 distribution-connected renewables, Wind Onshore, Wind Offshore, Biomass, Hydro Run-of-river and
+  poundage, Hydro Water Reservoir, Hydro Pumped Storage (generation side), Geothermal, Waste (psrTypes
+  B16, B20, B19, B18, B01, B11, B12, B10, B09, B17).
+- Composition check against the old feed (recomputed from the cached energy-charts per-type feeds,
+  2025, PT15M): `renewable_share_of_generation` ≈ (biomass + waste + wind_onshore + wind_offshore +
+  solar) / total generation, mean absolute difference about 1.3 percentage points (the served share is
+  not exactly reproducible from the per-type feeds; the site keeps the served definition's composition,
+  and the ENTSO-E renewable set above matches it — hydro/geothermal for NL sit inside energy-charts'
+  `others`, which the served share does not count as renewable). Residual load =
+  `load − wind_onshore − wind_offshore − distribution_renewables` (mean absolute difference 0.04 MW on
+  the 2025 cache).
+  `renewable_share_of_load` ≈ (same renewable sum) / load; the daily score share for NL is the mean of
+  the hourly shares per Amsterdam-local day, matching the energy-charts `ren_share_daily_avg` definition
+  used by the other 35 zones (mean absolute difference 0.57 points on the 49 comparable days).
+- Probe gate (`scripts/probe-entsoe.mjs`, run in Actions with the secret; full report recorded in the PR
+  description). All criteria are computed from one deduplicated trailing-year A75/A65 series; the
+  2026-06-15 and 2026-01-15 sample days are extracted from it: (1) the aggregate's peak in the summer
+  sample day's local midday window (10:00-15:00) must be at least 10 percent of the daylight-connected
+  fleet, solar AC 29.28 GW plus onshore wind 7.18 GW = 36.46 GW (energy-charts installed_power, latest
+  record), expected 30-45 percent; (2) the B16+B20 aggregate must annualize to 30-42 TWh/yr (official
+  solar 25.5 plus official onshore wind 16.4, with slack for the window offset); (3) diurnality: the
+  trailing-year mean of the aggregate over local midday hours (10:00-15:00) must be at least 3 times its
+  mean over local night hours (00:00-05:00), expected about 4-5; plus the hour-alignment check and a
+  double-count cross-check that must agree with criterion 2 to the MWh. If any criterion fails, the
+  backfill does not run. The fetch layer's block preference and window coherence check (see the
+  dual-version bullet above) run before the criteria; its per-window attempts table (ratio, per-copy
+  divergence evidence, block coverage, accepted attempt) and the accepted attempt's per-type copy
+  statistics are printed in the probe report figures (`windowAttempts`, `trailingWindowCopies`). A one-off cross-zone solar audit (`scripts/audit-zones.mjs`, energy-charts
+  only) checks all 36 score zones' observed solar peak on 2026-06-15 as a share of installed solar AC
+  capacity; the pre-fix NL shows about 1 percent.
+
 ## Snapshot data contract
 
 `src/data/snapshot.json` (generated, committed; see `src/data/snapshot.ts` for

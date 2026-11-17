@@ -14,7 +14,7 @@ export interface RiskSample {
   renShareGen: number | null;
   load: number | null;
   netImportGW: number | null;
-  windSolarMW: number | null;
+  windRenewablesMW: number | null;
 }
 
 export type RiskLevel = "calm" | "watch" | "high";
@@ -35,7 +35,7 @@ export const RISK_PARAMS = {
   DAYS_30: 30,
   /** Trailing window for the Dunkelflaute run. */
   DAYS_90: 90,
-  /** Wind+solar below this share of load counts as a Dunkelflaute hour. */
+  /** Wind plus distribution-connected renewables below this share of load counts as a Dunkelflaute hour. */
   DUNKELFAUTE_LOAD_SHARE: 20,
   /** Level thresholds, documented in INDICATOR_RULES. */
   NEGATIVE_PRICE_SHARE: { watch: 0.01, high: 0.05 },
@@ -50,7 +50,7 @@ export const INDICATOR_RULES: Record<string, string> = {
   redHoursShare: `Share of trailing-${RISK_PARAMS.DAYS_30}-day hours qualifying as red hours under the green window rule (price ≥ 70th percentile AND renewable share of generation ≤ 30th percentile, same code path as the green window). Watch at ≥ ${(RISK_PARAMS.RED_HOURS_SHARE.watch * 100).toFixed(0)}%, high at ≥ ${(RISK_PARAMS.RED_HOURS_SHARE.high * 100).toFixed(0)}%.`,
   importCoverShare: `Over the trailing ${RISK_PARAMS.DAYS_30} days: Σ max(0, net physical import in GW × 1000) / Σ load in MW — the share of Dutch load covered by net imports (cross-border physical flows, imports positive). Watch at ≥ ${(RISK_PARAMS.IMPORT_COVER_SHARE.watch * 100).toFixed(0)}%, high at ≥ ${(RISK_PARAMS.IMPORT_COVER_SHARE.high * 100).toFixed(0)}%.`,
   priceSpread: `Trailing-${RISK_PARAMS.DAYS_30}-day hourly price spread: 90th minus 10th percentile of day-ahead price, EUR/MWh. Watch at ≥ ${RISK_PARAMS.PRICE_SPREAD_EUR.watch} EUR/MWh, high at ≥ ${RISK_PARAMS.PRICE_SPREAD_EUR.high} EUR/MWh.`,
-  dunkelflauteRun: `Longest consecutive run of hours in the trailing ${RISK_PARAMS.DAYS_90} days with wind onshore + wind offshore + solar below ${RISK_PARAMS.DUNKELFAUTE_LOAD_SHARE}% of load. Watch at ≥ ${RISK_PARAMS.DUNKELFAUTE_RUN_HOURS.watch} h, high at ≥ ${RISK_PARAMS.DUNKELFAUTE_RUN_HOURS.high} h.`,
+  dunkelflauteRun: `Longest consecutive run of hours in the trailing ${RISK_PARAMS.DAYS_90} days with wind onshore + wind offshore + distribution-connected renewables below ${RISK_PARAMS.DUNKELFAUTE_LOAD_SHARE}% of load. Watch at ≥ ${RISK_PARAMS.DUNKELFAUTE_RUN_HOURS.watch} h, high at ≥ ${RISK_PARAMS.DUNKELFAUTE_RUN_HOURS.high} h.`,
 };
 
 function levelOf(value: number | null, watch: number, high: number): RiskLevel | "unknown" {
@@ -98,7 +98,7 @@ export function computeRiskIndicators(
   let run = 0;
   let best = 0;
   for (const s of samples90) {
-    const ws = s.windSolarMW;
+    const ws = s.windRenewablesMW;
     const l = s.load;
     const isDunkel = ws != null && l != null && l > 0 && ws / l < RISK_PARAMS.DUNKELFAUTE_LOAD_SHARE / 100;
     run = isDunkel ? run + 1 : 0;

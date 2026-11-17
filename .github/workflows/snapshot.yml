@@ -1,17 +1,21 @@
 name: Refresh data snapshot
 
 # Daily server-side fetch of the energy-charts.info v2 rolling window and
-# tomorrow's day-ahead prices, plus the Open-Meteo weather overlay and the
-# European score summaries (NL daily, all zones on the first run of each ISO
-# week). Writes public/data/snapshot.json and commits it to main, which
-# triggers the build workflow. The backfill (scripts/backfill.mjs) NEVER
-# runs here — it is a one-time local/mini-PC job.
+# tomorrow's day-ahead prices, NL generation per type and actual load from
+# the ENTSO-E Transparency Platform (A69/A65, NL bidding zone), plus the
+# Open-Meteo weather overlay and the European score summaries (NL daily from
+# ENTSO-E per-type data, all other zones on the first run of each ISO week
+# from their unchanged energy-charts feed). Writes public/data/snapshot.json
+# and commits it to main, which triggers the build workflow. The backfill
+# (scripts/backfill.mjs) NEVER runs here — it is a one-time local/mini-PC or
+# one-off dispatched job.
 #
 # 12:35 UTC lands after the day-ahead publication (~13:00 CET) in both DST
 # states (CET = UTC+1, CEST = UTC+2).
 #
 # The Mistral key is present only on this job; the build jobs run without
-# it and narration simply stays hidden (fail-soft).
+# it and narration simply stays hidden (fail-soft). The ENTSO-E token is
+# only read from the ENTSOE_API_TOKEN secret and is never logged.
 
 on:
   schedule:
@@ -31,9 +35,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - run: npm ci
       - run: node --experimental-strip-types scripts/snapshot.mjs
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
       - name: Commit snapshot if changed
         run: |
           git config user.name "green-grid-snapshot-bot"

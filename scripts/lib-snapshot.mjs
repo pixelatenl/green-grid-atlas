@@ -46,6 +46,25 @@ export const SOURCES = {
     licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
     licencePage: "https://open-meteo.com/en/licence",
   },
+  entsoe: {
+    name: "ENTSO-E Transparency Platform",
+    url: "https://transparency.entsoe.eu",
+    api: "https://web-api.tp.entsoe.eu/api",
+    docs: "https://transparency.entsoe.eu/content/operational-data",
+    licenseNote:
+      "NL generation and load are published on the ENTSO-E Transparency Platform pursuant to Regulation (EU) No 543/2013; reuse is subject to the platform's General Terms and Conditions (see transparency.entsoe.eu).",
+    documentTypes: { generationPerType: "A75", actualTotalLoad: "A65" },
+    processType: "A16",
+    domainEIC: "10YNL----------L",
+  },
+};
+
+/** ENTSO-E endpoint references recorded in the snapshot's sources.endpoints. */
+export const ENTSOE_ENDPOINTS = {
+  entsoeGeneration:
+    "ENTSO-E web-api.tp.entsoe.eu/api documentType=A75 processType=A16 in_Domain=10YNL----------L (NL bidding zone)",
+  entsoeLoad:
+    "ENTSO-E web-api.tp.entsoe.eu/api documentType=A65 processType=A16 outBiddingZone_Domain=10YNL----------L (NL bidding zone)",
 };
 
 /** NL representative point for the weather overlay (central Netherlands). */
@@ -133,7 +152,7 @@ export function daysToTrailing(days) {
     const windMW = d.slots.map((s) =>
       roundForStorage(((s.values.wind_onshore ?? 0) + (s.values.wind_offshore ?? 0)) || null, 0),
     );
-    const solarMW = d.slots.map((s) => roundForStorage(s.values.solar ?? null, 0));
+    const distributionRenewablesMW = d.slots.map((s) => roundForStorage(s.values.distribution_renewables ?? null, 0));
     const flows = Object.fromEntries(
       FLOW_SERIES.map((n) => [n, d.slots.map((s) => roundForStorage(s.values[n] ?? null, 2))]),
     );
@@ -155,7 +174,7 @@ export function daysToTrailing(days) {
       residual,
       netImport,
       windMW,
-      solarMW,
+      distributionRenewablesMW,
       flows,
       weather,
     };
@@ -296,8 +315,10 @@ export function samplesFromDays(days) {
           Object.fromEntries(PRODUCTION_TYPES.map((t) => [t, slot.values[t] ?? null])),
           slot.values.load ?? null,
         ),
-        windSolarMW:
-          (slot.values.wind_onshore ?? 0) + (slot.values.wind_offshore ?? 0) + (slot.values.solar ?? 0),
+        windRenewablesMW:
+          (slot.values.wind_onshore ?? 0) +
+          (slot.values.wind_offshore ?? 0) +
+          (slot.values.distribution_renewables ?? 0),
         load: slot.values.load ?? null,
         mix: Object.fromEntries(PRODUCTION_TYPES.map((t) => [t, slot.values[t] ?? null])),
       });
@@ -329,8 +350,8 @@ export function riskFromSamples(samples, windowResult) {
     ? usable.filter((s) => isRedHour(s.price, s.renShareGen, pct)).length / usable.length
     : null;
   return computeRiskIndicators(
-    s30.map((s) => ({ price: s.price, renShareGen: s.renShareGen, load: s.load, netImportGW: s.netImport, windSolarMW: s.windSolarMW })),
-    s90.map((s) => ({ price: s.price, renShareGen: s.renShareGen, load: s.load, netImportGW: s.netImport, windSolarMW: s.windSolarMW })),
+    s30.map((s) => ({ price: s.price, renShareGen: s.renShareGen, load: s.load, netImportGW: s.netImport, windRenewablesMW: s.windRenewablesMW })),
+    s90.map((s) => ({ price: s.price, renShareGen: s.renShareGen, load: s.load, netImportGW: s.netImport, windRenewablesMW: s.windRenewablesMW })),
     redShare,
   );
 }
@@ -339,7 +360,7 @@ export function riskFromSamples(samples, windowResult) {
 export function profilesFromSamples(samples, daysBack = 30) {
   const now = samples.length ? samples[samples.length - 1].utc : 0;
   const inWindow = samples.filter((s) => s.utc >= now - daysBack * 86_400_000);
-  const keys = ["price", "ren", "intensity", "load", "netImport", "fossil_gas", "solar", "wind", "residual"];
+  const keys = ["price", "ren", "intensity", "load", "netImport", "fossil_gas", "distribution_renewables", "wind", "residual"];
   const sums = Object.fromEntries(keys.map((k) => [k, Array(24).fill(0)]));
   const counts = Object.fromEntries(keys.map((k) => [k, Array(24).fill(0)]));
   for (const s of inWindow) {
@@ -351,7 +372,7 @@ export function profilesFromSamples(samples, daysBack = 30) {
       load: s.load,
       netImport: s.netImport,
       fossil_gas: s.mix?.fossil_gas ?? null,
-      solar: s.mix?.solar ?? null,
+      distribution_renewables: s.mix?.distribution_renewables ?? null,
       wind: (s.mix?.wind_onshore ?? 0) + (s.mix?.wind_offshore ?? 0),
       residual: s.residualLoad,
     };
@@ -393,6 +414,36 @@ export function recordsFromSamples(samples) {
     })),
     dunkel,
   );
+}
+
+/* ---------------- NL score from ENTSO-E per-type data ---------------- */
+
+/**
+ * Daily renewable share of load (percent) per Amsterdam-local day, computed
+ * from ENTSO-E A75/A65 hourly slots as the mean of the hourly renewable
+ * share of load — the same daily-average definition the energy-charts
+ * ren_share_daily_avg feed uses for the other zones (verified against its
+ * per-type feeds, see docs/data-notes.md). Input: hour slots (bucketHours
+ * output) whose values carry renewable_share_of_load. Returns the daily
+ * shares for the trailing `daysBack` local days, oldest first.
+ */
+export function dailyRenewableShareOfLoadFromSlots(slots, { daysBack = 365, now = Date.now() } = {}) {
+  const byDay = new Map();
+  for (const slot of slots) {
+    const v = slot.values.renewable_share_of_load;
+    if (v == null || !Number.isFinite(v)) continue;
+    const date = dayKey(slot.utc);
+    const acc = byDay.get(date) ?? { sum: 0, n: 0 };
+    acc.sum += v;
+    acc.n += 1;
+    byDay.set(date, acc);
+  }
+  const cutoff = new Date(now - daysBack * 86_400_000).toISOString().slice(0, 10);
+  const daily = [];
+  for (const [date, acc] of [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    if (date >= cutoff && acc.n > 0) daily.push(Math.round((acc.sum / acc.n) * 10) / 10);
+  }
+  return daily;
 }
 
 export { computeScore, mergeRecords, EMISSION_FACTORS_VERSION };
