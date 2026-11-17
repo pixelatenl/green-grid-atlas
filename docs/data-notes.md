@@ -186,6 +186,42 @@ other zone keeps its energy-charts feed.
 - Rate limit: 400 requests/minute per IP and per token; a 429 imposes a ten-minute ban. The fetch layer
   paces at one request per second, one at a time, and on 429 waits `Retry-After` (fallback 600 s) times
   the attempt number, capped at 900 s, up to 4 attempts.
+- Dual-version platform responses and the fetch-layer integrity guard (added 2026-11-17, after probe run
+  43975014678): every A75 response carries each psrType in two `TimeSeries` copies (in the one-day
+  documents mRID 1-10 and 11-20, both PT15M, one copy complete and one partial), and the documents carry
+  no `docStatus` and no `revisionNumber`, so the parser's dedup preference chain reduces to its final
+  tie-break — the first copy in document order wins, and which version comes first varies per request.
+  On 2026-11-17 the platform served two conflicting versions of the same window minutes apart: a healthy
+  variant (B20 summer peak 11,185 MW, 117-119 GWh/day, gas max 7,493 MW, B16+B20 35.9-39.2 TWh/yr,
+  total 122.2 TWh) and a degraded variant (B20 flat ~500-520 MW day and night, 12.3 GWh/day, gas
+  ~123 MW at noon, 0.6 TWh/yr of gas, total generation 33.7 TWh/yr against a healthy 118.7 TWh/yr A65
+  load document, coherence ratio 0.28). The degraded variant is objectively false against the load
+  document and the official statistics (CBS 2025: solar 25.5, onshore wind 16.4, offshore 15.6 TWh),
+  not a revised truth, so rejecting it is a coherence judgment, not an editorial preference.
+  `parseEntsoeIntervals` therefore reports per-psrType copy statistics computed BEFORE dedup (per
+  TimeSeries copy: point count, first/last timestamp, mean MW over the copy's own covered timestamps,
+  energy in GWh; per psrType: how many (psrType, timestamp) keys carry more than one record and how many
+  of those carry differing values) — the parser never adjudicates by value, the existing dedup is
+  unchanged. `fetchNlPowerEnvelope` guards every year window with bounded fresh retries; the
+  fetch-integrity constants (NOT probe-gate criteria; never edited to make a run pass):
+  - coherence ratio band **0.6-1.4**: total generation energy / total load energy, computed only over
+    timestamps where generation data exists. Derivation: Dutch annual generation has been roughly
+    85-105% of load (CBS, record production and record exports in 2025), while the degraded variant
+    observed in run 43975014678 sits at 0.28 — far outside any honest window.
+  - ambiguity factor **2**: for every psrType whose largest per-copy mean exceeds the materiality floor,
+    all per-copy means must agree within a factor of 2. A larger divergence means the platform served
+    two conflicting published versions inside one document; such a document must not be silently
+    adjudicated by document order.
+  - materiality floor **50 MW**: below it a copy divergence is numerical noise, not a version conflict.
+  - **3 attempts** per window: an attempt failing the coherence or ambiguity check re-fetches that
+    window's A75 document fresh (bypassing the disk cache, paced as usual); the first passing attempt is
+    kept. If no attempt passes, the window is marked failed and surfaced with the full attempts table
+    (per attempt: ratio, per-type ambiguity findings, coverage), so the probe's entsoeFetch criterion
+    fails with a legible reason and the stop rule applies. Copies are never summed, versions are never
+    mixed across retries, there is never a fallback to another data source.
+  - coverage (the fraction of the window's load-bearing timestamps that also carry generation data) is
+    reported per window and per attempt but NOT gated — the probe criteria catch undercoverage, and the
+    daily snapshot's fresh windows legitimately tolerate sparse coverage at the publication lag.
 - Timestamps are UTC interval starts (`...Z`). The pipeline converts them to Europe/Amsterdam through
   the shared `bucketHours`/`hourKey` path (a 25-hour fall-back day keeps both 02:00 slots, a 23-hour
   spring-forward day has none) and every build verifies the conversion hour-by-hour against the
@@ -230,7 +266,10 @@ other zone keeps its energy-charts feed.
   trailing-year mean of the aggregate over local midday hours (10:00-15:00) must be at least 3 times its
   mean over local night hours (00:00-05:00), expected about 4-5; plus the hour-alignment check and a
   double-count cross-check that must agree with criterion 2 to the MWh. If any criterion fails, the
-  backfill does not run. A one-off cross-zone solar audit (`scripts/audit-zones.mjs`, energy-charts
+  backfill does not run. The fetch layer's window integrity guard (see the dual-version bullet above)
+  runs before the criteria; its per-window attempts table (ratio, ambiguity findings, coverage, accepted
+  attempt) and the accepted attempt's per-type copy statistics are printed in the probe report figures
+  (`windowAttempts`, `trailingWindowCopies`). A one-off cross-zone solar audit (`scripts/audit-zones.mjs`, energy-charts
   only) checks all 36 score zones' observed solar peak on 2026-06-15 as a share of installed solar AC
   capacity; the pre-fix NL shows about 1 percent.
 

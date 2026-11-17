@@ -38,6 +38,16 @@
   only — the generation document carries generation), Geothermal, Waste. The remaining production
   types feed the site's "others" bucket (the emission-factor table is
   keyed by energy-charts series ids and is not changed).
+
+  Fetch integrity (docs/data-notes.md section 6, dual-version observation):
+  every A75 response carries each psrType in two TimeSeries copies and the
+  documents carry no docStatus/revisionNumber, so the platform can serve two
+  conflicting published versions of the same window and the parser's dedup
+  tie-break is document order. parseEntsoeIntervals therefore reports
+  per-psrType copy statistics before dedup (it never adjudicates by value),
+  and fetchNlPowerEnvelope guards every window with a coherence ratio against
+  the window's A65 load document plus a duplicate-copy ambiguity check, with
+  bounded fresh retries (INTEGRITY constants below).
 */
 
 import { createHash } from "node:crypto";
@@ -58,6 +68,40 @@ export const DOC_LOAD = "A65"; // actual total load
 // kept for the probe's as-specified comparison: A69/A01 is the wind-and-solar
 // day-ahead forecast, not actual generation per type.
 export const AS_SPECIFIED = { DOC: "A69", PROCESS: "A01" };
+
+/*
+  Fetch-integrity constants for the per-window acceptance guard in
+  fetchNlPowerEnvelope (docs/data-notes.md section 6, dual-version
+  observation). These are fetch-integrity constants, NOT probe-gate
+  criteria; they are never edited to make a run pass.
+
+  - COHERENCE_RATIO_MIN/MAX 0.6..1.4: total generation energy / total load
+    energy over the timestamps where generation data exists. Dutch annual
+    generation has been roughly 85-105% of load (CBS: record production and
+    record exports in 2025); the defective platform variant observed in
+    probe run 43975014678 sat at 0.28 (33.7 TWh/yr generation against a
+    healthy 118.7 TWh/yr load document).
+  - AMBIGUITY_FACTOR 2: for every psrType whose largest per-copy mean
+    exceeds the materiality floor, all per-copy means must agree within a
+    factor of 2, otherwise the document served two conflicting published
+    versions of the same type and must not be silently adjudicated by
+    document order.
+  - MATERIALITY_FLOOR_MW 50: below this a copy divergence is numerical
+    noise, not a version conflict.
+  - MAX_WINDOW_ATTEMPTS 3: a failed attempt re-fetches the window's A75
+    document fresh (bypassing the disk cache, paced as usual); the first
+    passing attempt is kept.
+*/
+export const INTEGRITY = {
+  COHERENCE_RATIO_MIN: 0.6,
+  COHERENCE_RATIO_MAX: 1.4,
+  AMBIGUITY_FACTOR: 2,
+  MATERIALITY_FLOOR_MW: 50,
+  MAX_WINDOW_ATTEMPTS: 3,
+};
+
+const r1 = (x) => Math.round(x * 10) / 10;
+const r3 = (x) => Math.round(x * 1000) / 1000;
 
 const MIN_SPACING_MS = 1_000; // 60 req/min, far below the 400/min limit
 const MAX_ATTEMPTS = 4;
@@ -286,7 +330,32 @@ export function parseEntsoeIntervals(xml) {
   const series = [...collect(doc, "TimeSeries"), ...collect(doc, "timeSeries")];
   const records = [];
   const seenPsr = new Set();
+  // Collapse duplicate (psrType, timestamp) records. Documents can carry
+  // each type in more than one TimeSeries copy. Preference order:
+  // docStatus A05 (final) over any provisional status, then the higher
+  // revisionNumber, then the finer resolution (smaller ms), and on a full
+  // tie the FIRST record in document order wins (identical values are a
+  // benign duplication). The parser never adjudicates by value.
+  const supersedes = (candidate, incumbent) => {
+    const candFinal = candidate.docStatus === "A05" ? 1 : 0;
+    const incFinal = incumbent.docStatus === "A05" ? 1 : 0;
+    if (candFinal !== incFinal) return candFinal > incFinal;
+    const candRev = candidate.revisionNumber ?? -1;
+    const incRev = incumbent.revisionNumber ?? -1;
+    if (candRev !== incRev) return candRev > incRev;
+    if (candidate.ms !== incumbent.ms) return candidate.ms < incumbent.ms;
+    return false;
+  };
+  // Per-psrType copy statistics, computed BEFORE dedup: the platform serves
+  // each psrType in more than one TimeSeries copy and the documents carry no
+  // docStatus/revisionNumber, so divergent copies would otherwise be resolved
+  // silently by document order (docs/data-notes.md section 6, dual-version
+  // observation). The parser only reports; it never adjudicates by value.
+  const copyBuckets = new Map(); // psr -> { series: [...], keyCounts: Map<ts, {n, mws}> }
+  let copyIndex = 0;
   for (const ts of series) {
+    copyIndex += 1;
+    const mRID = ts.mRID ?? ts["@_mRID"] ?? null;
     // psrType sits under MktPSRType in the generation responses (a direct child or an
     // attribute in some other document types); accept all shapes.
     const mkt = ts.MktPSRType ?? {};
@@ -299,6 +368,11 @@ export function parseEntsoeIntervals(xml) {
     const docStatus = typeof docStatusRaw === "string" ? docStatusRaw : null;
     const revRaw = ts["@_revisionNumber"] ?? ts.revisionNumber ?? null;
     const revisionNumber = Number.isFinite(Number(revRaw)) ? Number(revRaw) : null;
+    const psrKey = psrType ?? "(none)";
+    if (!copyBuckets.has(psrKey)) copyBuckets.set(psrKey, { series: [], keyCounts: new Map() });
+    const bucket = copyBuckets.get(psrKey);
+    const copy = { index: copyIndex, mRID, points: 0, byTs: new Map() };
+    bucket.series.push(copy);
     const periods = ts.Period ?? [];
     for (const period of periods) {
       const start = Date.parse(period.timeInterval?.["@_start"] ?? period.timeInterval?.start);
@@ -311,26 +385,42 @@ export function parseEntsoeIntervals(xml) {
         const qty = Number(point["@_quantity"] ?? point.quantity);
         if (!Number.isFinite(pos) || !Number.isFinite(qty)) continue;
         const tsMs = start + (pos - 1) * resMs;
-        records.push({ timestamp: new Date(tsMs).toISOString(), psrType, mw: qty, ms: resMs, docStatus, revisionNumber });
+        const record = { timestamp: new Date(tsMs).toISOString(), psrType, mw: qty, ms: resMs, docStatus, revisionNumber };
+        records.push(record);
+        copy.points += 1;
+        const prevCopy = copy.byTs.get(record.timestamp);
+        if (!prevCopy || supersedes(record, prevCopy)) copy.byTs.set(record.timestamp, record);
+        const kc = bucket.keyCounts.get(record.timestamp) ?? { n: 0, mws: new Set() };
+        kc.n += 1;
+        kc.mws.add(record.mw);
+        bucket.keyCounts.set(record.timestamp, kc);
       }
     }
   }
-  // Collapse duplicate (psrType, timestamp) records. Documents can carry
-  // each type in more than one TimeSeries copy. Preference order:
-  // docStatus A05 (final) over any provisional status, then the higher
-  // revisionNumber, then the finer resolution (smaller ms), and on a full
-  // tie the FIRST record in document order wins (identical values are a
-  // benign duplication).
-  const supersedes = (candidate, incumbent) => {
-    const candFinal = candidate.docStatus === "A05" ? 1 : 0;
-    const incFinal = incumbent.docStatus === "A05" ? 1 : 0;
-    if (candFinal !== incFinal) return candFinal > incFinal;
-    const candRev = candidate.revisionNumber ?? -1;
-    const incRev = incumbent.revisionNumber ?? -1;
-    if (candRev !== incRev) return candRev > incRev;
-    if (candidate.ms !== incumbent.ms) return candidate.ms < incumbent.ms;
-    return false;
-  };
+  // Finalize the per-psrType copy statistics (before the merged dedup below).
+  const copies = {};
+  for (const [psr, bucket] of copyBuckets) {
+    let duplicateKeys = 0;
+    let differingKeys = 0;
+    for (const kc of bucket.keyCounts.values()) {
+      if (kc.n > 1) {
+        duplicateKeys += 1;
+        if (kc.mws.size > 1) differingKeys += 1;
+      }
+    }
+    copies[psr] = {
+      duplicateKeys,
+      differingKeys,
+      series: bucket.series.map((c) => {
+        const recs = [...c.byTs.values()];
+        const first = recs.length ? recs.map((r) => r.timestamp).reduce((a, b) => (a < b ? a : b)) : null;
+        const last = recs.length ? recs.map((r) => r.timestamp).reduce((a, b) => (a > b ? a : b)) : null;
+        const meanMW = recs.length ? recs.reduce((s, r) => s + r.mw, 0) / recs.length : null;
+        const energyGWh = recs.reduce((s, r) => s + (r.mw * r.ms) / 3_600_000 / 1000, 0);
+        return { index: c.index, mRID: c.mRID, points: c.points, timestamps: c.byTs.size, first, last, meanMW, energyGWh };
+      }),
+    };
+  }
   const deduped = new Map();
   for (const r of records) {
     const key = `${r.psrType ?? ""}|${r.timestamp}`;
@@ -342,6 +432,12 @@ export function parseEntsoeIntervals(xml) {
   return {
     records,
     psrTypes: [...seenPsr].sort(),
+    // Per-psrType copy statistics computed before dedup: for each TimeSeries
+    // copy of the type, point count, first/last timestamp, mean MW over the
+    // copy's own covered timestamps and energy in GWh; plus per psrType the
+    // number of (psrType, timestamp) keys carrying more than one record and
+    // how many of those carry differing values.
+    copies,
     // Debug aid for the probe gate: the response body never contains the
     // token, so a short snippet and a tag histogram are safe to log when
     // nothing was found.
@@ -349,6 +445,66 @@ export function parseEntsoeIntervals(xml) {
     snippet: records.length === 0 ? String(xml ?? "").slice(0, 2500) : undefined,
     tagHistogram: records.length === 0 ? tagHistogramOf(doc) : undefined,
   };
+}
+
+/**
+ * Evaluate one A75 attempt of a window against that window's A65 load
+ * document. Returns { coverage, ratio, ambiguity, pass, failedChecks }.
+ *
+ *  1. coverage (reported, never gated): fraction of the window's
+ *     load-bearing timestamps that also carry generation data.
+ *  2. coherence ratio (gated): total generation energy / total load energy,
+ *     computed only over timestamps where generation data exists (load
+ *     energy is 0 where the load document has no record). Accept only
+ *     within [COHERENCE_RATIO_MIN, COHERENCE_RATIO_MAX].
+ *  3. ambiguity guard (gated): for every psrType whose largest per-copy mean
+ *     exceeds MATERIALITY_FLOOR_MW, the per-copy means must agree within
+ *     AMBIGUITY_FACTOR.
+ */
+export function evaluateWindowAttempt(genParsed, loadParsed) {
+  const genEnergyMWh = new Map(); // ts -> generation energy in MWh
+  for (const r of genParsed.records) {
+    genEnergyMWh.set(r.timestamp, (genEnergyMWh.get(r.timestamp) ?? 0) + (r.mw * r.ms) / 3_600_000);
+  }
+  const loadEnergyMWh = new Map(); // ts -> load energy in MWh
+  for (const r of loadParsed.records) {
+    loadEnergyMWh.set(r.timestamp, (loadEnergyMWh.get(r.timestamp) ?? 0) + (r.mw * r.ms) / 3_600_000);
+  }
+  const loadTs = [...loadEnergyMWh.keys()];
+  const genTs = [...genEnergyMWh.keys()];
+  const genTsSet = new Set(genTs);
+  const common = loadTs.filter((ts) => genTsSet.has(ts));
+  const coverage = loadTs.length ? common.length / loadTs.length : null;
+  let genEnergy = 0;
+  let loadEnergy = 0;
+  for (const ts of genTs) {
+    genEnergy += genEnergyMWh.get(ts);
+    loadEnergy += loadEnergyMWh.get(ts) ?? 0;
+  }
+  const ratio = loadEnergy > 0 ? genEnergy / loadEnergy : null;
+  const ambiguity = [];
+  for (const [psr, c] of Object.entries(genParsed.copies ?? {})) {
+    const means = c.series.map((s) => s.meanMW).filter((m) => Number.isFinite(m));
+    if (!means.length) continue;
+    const max = Math.max(...means);
+    if (max <= INTEGRITY.MATERIALITY_FLOOR_MW) continue;
+    const min = Math.min(...means);
+    const factor = min > 0 ? max / min : Infinity;
+    if (factor > INTEGRITY.AMBIGUITY_FACTOR) {
+      ambiguity.push({
+        psrType: psr,
+        name: PSR_TYPES[psr]?.name ?? "UNMAPPED",
+        copyMeansMW: means.map((m) => r1(m)),
+        largestCopyMeanMW: r1(max),
+        smallestCopyMeanMW: r1(min),
+        factor: Number.isFinite(factor) ? r1(factor) : "infinite",
+      });
+    }
+  }
+  const failedChecks = [];
+  if (ratio == null || ratio < INTEGRITY.COHERENCE_RATIO_MIN || ratio > INTEGRITY.COHERENCE_RATIO_MAX) failedChecks.push("coherence");
+  if (ambiguity.length > 0) failedChecks.push("ambiguity");
+  return { coverage, ratio, ambiguity, pass: failedChecks.length === 0, failedChecks };
 }
 
 /**
@@ -364,27 +520,105 @@ export function parseEntsoeIntervals(xml) {
  * aggregate of distribution-connected renewables), not to a pure solar id.
  * perTypeGWh carries the per-psrType energy (GWh) of the same deduplicated
  * records, so probe criteria and cross-checks derive from one parsed array.
+ *
+ * Window acceptance guard (fetch integrity, docs/data-notes.md section 6):
+ * every window's A75 document is checked for coherence against the window's
+ * A65 load document (generation/load energy ratio within 0.6-1.4 over
+ * timestamps with generation data) and for duplicate-copy ambiguity
+ * (per-copy means within a factor of 2 above a 50 MW materiality floor).
+ * A failed attempt re-fetches the A75 document FRESH (bypassing the disk
+ * cache, paced as usual), up to INTEGRITY.MAX_WINDOW_ATTEMPTS attempts; the
+ * first passing attempt is merged. Copies are never summed and versions are
+ * never mixed across retries. If no attempt passes, the window is marked
+ * failed and surfaced in the returned windowRecords (full attempts table:
+ * per attempt the ratio, per-type ambiguity findings and coverage), so
+ * callers can fail legibly. Coverage is reported per attempt but not gated.
+ * The returned windowRecords also carry the accepted attempt's per-psrType
+ * copy statistics (from parseEntsoeIntervals) for the probe report.
  */
 export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false } = {}) {
   const windows = entsoeWindows(startUtcMs, endUtcMs);
   const byTs = new Map(); // ISO ts -> { values: Record<string, number>, renMW, totalMW, loadMW, ms }
   const psrSeen = new Set();
   const perTypeGWh = {}; // psrType -> energy in GWh, from the same deduplicated records
+  const windowRecords = []; // per-window acceptance-guard records for the probe
   let failures = 0;
 
   for (const w of windows) {
-    const gen = await fetchEntsoe({ documentType: DOC_GENERATION, ...w }, { fresh, label: `${DOC_GENERATION} ${w.periodStart}-${w.periodEnd}` });
-    if (!gen.ok) {
+    // The load document is fetched once per window; the guard evaluates every
+    // A75 attempt against it.
+    const load = await fetchEntsoe({ documentType: DOC_LOAD, ...w }, { fresh, label: `${DOC_LOAD} ${w.periodStart}-${w.periodEnd}` });
+    if (!load.ok) {
       failures += 1;
-      console.warn(`  ENTSO-E ${DOC_GENERATION} ${w.periodStart}-${w.periodEnd} FAILED: ${gen.error?.message ?? gen.error}`);
+      windowRecords.push({ window: w, attempts: [], acceptedAttempt: null, coverage: null, copies: null, failed: true, reason: `A65 fetch failed: ${load.error?.message ?? load.error}` });
+      console.warn(`  ENTSO-E ${DOC_LOAD} ${w.periodStart}-${w.periodEnd} FAILED: ${load.error?.message ?? load.error}`);
       continue;
     }
-    const { records, psrTypes, tagHistogram, snippet } = parseEntsoeIntervals(gen.xml);
-    for (const p of psrTypes) psrSeen.add(p);
-    if (gen.ok && records.length === 0) {
-      console.warn(`  ENTSO-E ${DOC_GENERATION} ${w.periodStart}-${w.periodEnd} returned no timeSeries; tags: ${JSON.stringify(tagHistogram)}; body starts: ${snippet}`);
+    const loadParsed = parseEntsoeIntervals(load.xml);
+    if (loadParsed.records.length === 0) {
+      console.warn(`  ENTSO-E ${DOC_LOAD} ${w.periodStart}-${w.periodEnd} returned no timeSeries; tags: ${JSON.stringify(loadParsed.tagHistogram)}; body starts: ${loadParsed.snippet}`);
     }
-    for (const r of records) {
+
+    const attempts = [];
+    let accepted = null;
+    for (let attempt = 1; attempt <= INTEGRITY.MAX_WINDOW_ATTEMPTS; attempt++) {
+      // Retries always bypass the disk cache: a cached defective document can
+      // never be re-accepted. Attempt 1 honours the caller's `fresh` flag.
+      const gen = await fetchEntsoe(
+        { documentType: DOC_GENERATION, ...w },
+        { fresh: attempt === 1 ? fresh : true, label: `${DOC_GENERATION} ${w.periodStart}-${w.periodEnd}${attempt > 1 ? ` (integrity attempt ${attempt})` : ""}` },
+      );
+      if (!gen.ok) {
+        attempts.push({ attempt, fromCache: false, fetchError: String(gen.error?.message ?? gen.error), coverage: null, coherenceRatio: null, ambiguity: [], pass: false, failedChecks: ["fetch"] });
+        console.warn(`  ENTSO-E ${DOC_GENERATION} ${w.periodStart}-${w.periodEnd} attempt ${attempt} FAILED: ${gen.error?.message ?? gen.error}`);
+        continue;
+      }
+      const genParsed = parseEntsoeIntervals(gen.xml);
+      if (genParsed.records.length === 0) {
+        console.warn(`  ENTSO-E ${DOC_GENERATION} ${w.periodStart}-${w.periodEnd} attempt ${attempt} returned no timeSeries; tags: ${JSON.stringify(genParsed.tagHistogram)}; body starts: ${genParsed.snippet}`);
+      }
+      const evaluation = evaluateWindowAttempt(genParsed, loadParsed);
+      attempts.push({
+        attempt,
+        fromCache: gen.fromCache,
+        coverage: evaluation.coverage != null ? r3(evaluation.coverage) : null,
+        coherenceRatio: evaluation.ratio != null ? r3(evaluation.ratio) : null,
+        ambiguity: evaluation.ambiguity,
+        duplicateKeys: Object.fromEntries(Object.entries(genParsed.copies ?? {}).map(([psr, c]) => [psr, { duplicateKeys: c.duplicateKeys, differingKeys: c.differingKeys }])),
+        pass: evaluation.pass,
+        failedChecks: evaluation.failedChecks,
+      });
+      if (evaluation.pass) {
+        accepted = genParsed;
+        break;
+      }
+      console.warn(
+        `  ENTSO-E ${DOC_GENERATION} ${w.periodStart}-${w.periodEnd} attempt ${attempt} rejected (${evaluation.failedChecks.join("+")}): ` +
+        `coherence ratio ${evaluation.ratio != null ? r3(evaluation.ratio) : "n/a"} (band ${INTEGRITY.COHERENCE_RATIO_MIN}-${INTEGRITY.COHERENCE_RATIO_MAX}), ` +
+        `ambiguity ${evaluation.ambiguity.length ? JSON.stringify(evaluation.ambiguity) : "none"}; ` +
+        (attempt < INTEGRITY.MAX_WINDOW_ATTEMPTS ? "re-fetching fresh" : "no attempts left"),
+      );
+    }
+    const acceptedAttempt = accepted ? attempts.findIndex((a) => a.pass) + 1 : null;
+    windowRecords.push({
+      window: w,
+      attempts,
+      acceptedAttempt,
+      coverage: acceptedAttempt ? attempts[acceptedAttempt - 1].coverage : null,
+      copies: accepted ? accepted.copies : null,
+      failed: !accepted,
+      reason: accepted ? null : `no A75 attempt passed the window integrity guard after ${attempts.length} attempt(s) (coherence band ${INTEGRITY.COHERENCE_RATIO_MIN}-${INTEGRITY.COHERENCE_RATIO_MAX}, ambiguity factor ${INTEGRITY.AMBIGUITY_FACTOR} above ${INTEGRITY.MATERIALITY_FLOOR_MW} MW)`,
+    });
+    if (!accepted) {
+      failures += 1;
+      console.warn(
+        `  ENTSO-E ${DOC_GENERATION} window ${w.periodStart}-${w.periodEnd} FAILED the integrity guard: ` +
+        attempts.map((a) => `attempt ${a.attempt}: ratio ${a.coherenceRatio ?? "n/a"}, ambiguity ${a.ambiguity.length ? `${a.ambiguity.length} type(s): ${a.ambiguity.map((x) => `${x.psrType} factor ${x.factor}`).join(", ")}` : "none"}, coverage ${a.coverage ?? "n/a"}`).join("; "),
+      );
+      continue;
+    }
+    for (const p of accepted.psrTypes) psrSeen.add(p);
+    for (const r of accepted.records) {
       const psr = PSR_TYPES[r.psrType];
       const seriesId = psr?.series ?? "others";
       perTypeGWh[r.psrType ?? "(none)"] = (perTypeGWh[r.psrType ?? "(none)"] ?? 0) + (r.mw * r.ms) / 3_600_000 / 1000;
@@ -394,16 +628,6 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
       rec.ms = rec.ms || r.ms;
       if (psr?.renewable) rec.renMW += r.mw;
       byTs.set(r.timestamp, rec);
-    }
-    const load = await fetchEntsoe({ documentType: DOC_LOAD, ...w }, { fresh, label: `${DOC_LOAD} ${w.periodStart}-${w.periodEnd}` });
-    if (!load.ok) {
-      failures += 1;
-      console.warn(`  ENTSO-E A65 ${w.periodStart}-${w.periodEnd} FAILED: ${load.error?.message ?? load.error}`);
-      continue;
-    }
-    const loadParsed = parseEntsoeIntervals(load.xml);
-    if (load.ok && loadParsed.records.length === 0) {
-      console.warn(`  ENTSO-E ${DOC_LOAD} ${w.periodStart}-${w.periodEnd} returned no timeSeries; tags: ${JSON.stringify(loadParsed.tagHistogram)}; body starts: ${loadParsed.snippet}`);
     }
     for (const r of loadParsed.records) {
       const rec = byTs.get(r.timestamp) ?? { values: {}, renMW: 0, totalMW: 0, loadMW: null, ms: 0 };
@@ -437,6 +661,11 @@ export async function fetchNlPowerEnvelope(startUtcMs, endUtcMs, { fresh = false
     psrTypes: [...psrSeen].sort(),
     perTypeGWh,
     windows,
+    // Per-window acceptance-guard records: per attempt the coherence ratio,
+    // per-type ambiguity findings, coverage and pass/fail, the accepted
+    // attempt index, and the accepted attempt's per-psrType copy statistics
+    // (so the probe can print both published versions when they coexist).
+    windowRecords,
   };
 }
 

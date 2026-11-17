@@ -124,6 +124,16 @@ export function MethodDrawer() {
               ratio of {PROBE_DIURNAL_RATIO} across the trailing year.
             </p>
             <p className="mt-1">
+              Fetch integrity: the platform serves each production type in two TimeSeries copies and its
+              documents carry no status or revision marker, so a window can arrive as two conflicting published
+              versions. The fetch layer therefore checks every window before accepting it — total generation
+              energy must sit between 0.6 and 1.4 times the window's load energy (Dutch generation has been
+              roughly 85–105% of load, per CBS), and above a 50 MW materiality floor the duplicate copies'
+              means must agree within a factor of 2 — re-fetching the window fresh up to 3 times. These are
+              fetch-integrity constants of the data pipeline, not display thresholds. An earlier probe run
+              drew a defective platform variant of the same window; that run's figures are not shown here.
+            </p>
+            <p className="mt-1">
               Historical note: the energy-charts NL solar series was defective (detected November 2026). It
               yielded about 0.48 TWh of solar per year against a 29.28 GW installed fleet (the same source's
               installed_power endpoint), while CBS reports 25.52 billion kWh of Dutch solar production in 2025

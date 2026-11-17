@@ -25,7 +25,13 @@
        hours (00:00-05:00), expected about 4-5x; the broken feed was flat.
 
   The double-count cross-check derives from the same parsed per-type arrays
-  as criterion 2 and must agree with it to the MWh. The gate also verifies,
+  as criterion 2 and must agree with it to the MWh. The fetch layer's window
+  acceptance guard (per-window coherence ratio against the A65 load document
+  plus duplicate-copy ambiguity, bounded fresh retries) is reported per
+  window in report.figures.windowAttempts, and the accepted attempt's
+  per-psrType copy statistics in report.figures.trailingWindowCopies, so the
+  report shows both published versions' per-type energies whenever a document
+  carries two divergent copies of a type. The gate also verifies,
   hour by hour, that the UTC->Europe/Amsterdam conversion of the ENTSO-E
   timestamps aligns with the unchanged energy-charts price series, records
   the canonical hour (2026-04-26 local 13:00/14:00, before vs after), and
@@ -119,19 +125,72 @@ async function main() {
 
   // One deduplicated trailing-year series (A75 generation + A65 load, chunked
   // by year at most) drives every criterion; the 2026-06-15 and 2026-01-15
-  // sample days are extracted from it below in local time.
+  // sample days are extracted from it below in local time. The fetch layer's
+  // window acceptance guard (coherence ratio + duplicate-copy ambiguity,
+  // bounded fresh retries) ran per window; its records are printed here.
   const trailing = await fetchNlPowerEnvelope(trailingStart, now, { fresh: true });
+  // Per-window attempts table (ratio per attempt, ambiguity findings per
+  // attempt, accepted attempt, coverage) and the accepted attempt's per-type
+  // copy statistics, so the report shows both published versions' per-type
+  // energies whenever they coexist in one document.
+  const sanitizeCopies = (copies) => {
+    if (!copies) return null;
+    const out = {};
+    for (const [psr, c] of Object.entries(copies)) {
+      out[psr] = {
+        name: PSR_TYPES[psr]?.name ?? "UNMAPPED",
+        duplicateKeys: c.duplicateKeys,
+        differingKeys: c.differingKeys,
+        series: c.series.map((s) => ({
+          index: s.index,
+          mRID: s.mRID,
+          points: s.points,
+          timestamps: s.timestamps,
+          first: s.first,
+          last: s.last,
+          meanMW: s.meanMW != null ? r1(s.meanMW) : null,
+          energyGWh: Math.round(s.energyGWh * 100) / 100,
+        })),
+      };
+    }
+    return out;
+  };
+  const windowAttemptsFigure = (trailing.windowRecords ?? []).map((wr) => ({
+    window: wr.window,
+    acceptedAttempt: wr.acceptedAttempt,
+    coverage: wr.coverage,
+    failed: wr.failed,
+    reason: wr.reason ?? null,
+    attempts: wr.attempts,
+  }));
+  report.figures.windowAttempts = windowAttemptsFigure;
+  report.figures.trailingWindowCopies = (trailing.windowRecords ?? []).map((wr) => ({
+    window: wr.window,
+    acceptedAttempt: wr.acceptedAttempt,
+    copies: sanitizeCopies(wr.copies),
+  }));
+  console.log("  window acceptance guard (per-window attempts):", JSON.stringify(windowAttemptsFigure));
   if (!trailing.ok) {
-    report.checks.entsoeFetch = {
-      pass: false,
-      detail: `ENTSO-E trailing-year window fetch failed (failures=${trailing.failures}); per-window reasons are in the warnings above`,
-    };
+    const failedWindows = (trailing.windowRecords ?? []).filter((w) => w.failed);
+    const detail = failedWindows.length
+      ? `ENTSO-E trailing-year window fetch failed the window integrity guard (failures=${trailing.failures}): ` +
+        failedWindows
+          .map((w) =>
+            `window ${w.window.periodStart}-${w.window.periodEnd} ${w.reason}; attempts: ` +
+            w.attempts.map((a) => `#${a.attempt} ratio ${a.coherenceRatio ?? "n/a"}, coverage ${a.coverage ?? "n/a"}, ambiguity ${a.ambiguity.length ? a.ambiguity.map((x) => `${x.psrType} factor ${x.factor}`).join(", ") : "none"}`).join("; "),
+          )
+          .join(" | ")
+      : `ENTSO-E trailing-year window fetch failed (failures=${trailing.failures}); per-window reasons are in figures.windowAttempts`;
+    report.checks.entsoeFetch = { pass: false, detail };
     console.error("\n=== ENTSO-E NL probe report (partial, figures collected so far) ===");
     console.error(JSON.stringify(report, null, 2));
     console.error(`Probe gate STOPPED: ENTSO-E trailing-year fetch failed (failures=${trailing.failures}); criteria not evaluated, backfill not run.`);
     process.exit(1);
   }
-  report.checks.entsoeFetch = { pass: true, detail: "trailing-year ENTSO-E window (A75 + A65, chunked by year) fetched and parsed" };
+  report.checks.entsoeFetch = {
+    pass: true,
+    detail: `trailing-year ENTSO-E windows (A75 + A65, chunked by year) fetched and passed the window integrity guard (accepted attempts: ${windowAttemptsFigure.map((w) => `${w.window.periodStart}-${w.window.periodEnd}#${w.acceptedAttempt}`).join(", ")}) and parsed`,
+  };
   report.figures.psrTypesSeen = trailing.psrTypes.map((c) => `${c} (${PSR_TYPES[c]?.name ?? "UNMAPPED"})`);
 
   // Hour slots (local date/hour keying) of the single trailing series.
@@ -577,7 +636,9 @@ async function main() {
             records: allRecords.length,
             uniqueTs: p.ts,
             duplicateRecords: p.dups,
-            energyMWhAll: Math.round(p.energyAll * 1000),
+            // acc.sum already accumulates MWh (MW * ms / 3,600,000); report
+            // the MWh sum directly, not multiplied again.
+            energyMWhAll: Math.round(p.energyAll),
           };
         }
       }
@@ -597,11 +658,22 @@ async function main() {
           trimValues: true,
         });
         const parsedDoc = p.parse(doc.xml);
-        const seriesList = [
+        // The parsed document's TimeSeries nodes are collected once per tag
+        // casing; the Object.values flatMap re-collects the same nodes, so
+        // deduplicate by (mRID, psrType) to list every series exactly once.
+        const seenSeries = new Set();
+        const seriesList = [];
+        for (const ts of [
           ...(parsedDoc?.GL_MarketDocument?.TimeSeries ?? []),
           ...(parsedDoc?.GL_MarketDocument?.timeSeries ?? []),
           ...Object.values(parsedDoc ?? {}).flatMap((v) => (v?.TimeSeries ?? [])),
-        ];
+        ]) {
+          const psr = ts.MktPSRType?.psrType ?? ts.MktPSRType?.["@_psrType"] ?? ts.psrType ?? null;
+          const key = `${ts.mRID ?? ""}|${psr ?? ""}`;
+          if (seenSeries.has(key)) continue;
+          seenSeries.add(key);
+          seriesList.push(ts);
+        }
         const struct = seriesList.map((ts) => ({
           psr: ts.MktPSRType?.psrType ?? ts.MktPSRType?.["@_psrType"] ?? ts.psrType ?? null,
           mRID: ts.mRID,
