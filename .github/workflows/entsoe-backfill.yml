@@ -8,7 +8,7 @@ name: ENTSO-E NL probe and one-off backfill
 #     and prints the full report to the job log; the figures are recorded in
 #     the PR description. If any acceptance criterion fails, this check fails.
 #   - labeling the PR "entsoe-backfill" (or workflow_dispatch with
-#     mode=backfill once the file is on the default branch): runs the probe
+#     mode=backfill on any ref that carries this file): runs the probe
 #     gate first and, only if every criterion passes, runs the one-off
 #     backfill (scripts/backfill.mjs, full 2015-present history, which
 #     includes the trailing window) and commits the rebuilt
@@ -37,9 +37,13 @@ permissions:
 
 jobs:
   probe:
+    # The probe gate runs on every pull_request event and on every dispatch
+    # (either mode), so that a mode=backfill dispatch is gated by the probe
+    # exactly like a labeled PR event (a skipped needed job would skip the
+    # backfill too).
     if: >
-      github.event_name == 'workflow_dispatch' && inputs.mode == 'probe'
-      || github.event_name == 'pull_request'
+      github.event_name == 'pull_request'
+      || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -63,7 +67,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          # pull_request events: the PR head sha; workflow_dispatch: the ref
+          # the workflow was dispatched on (the expression is empty for
+          # dispatch, so fall back to github.ref).
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
