@@ -49,6 +49,7 @@ import {
   TZ,
 } from "./lib-snapshot.mjs";
 import { bucketDays, bucketHours } from "../src/grid/hourly.ts";
+import { dayKey } from "../src/grid/amsterdam-time.ts";
 import { WINDOW_RULE_TEXT } from "../src/grid/green-window.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -61,7 +62,8 @@ const DAY_MS = 86_400_000;
 
 async function fetchYear(year) {
   const start = `${year}-01-01`;
-  const end = year === LAST_YEAR ? `${now.toISOString().slice(0, 10)}` : `${year}-12-31`;
+  // Rolling fetch end is the Amsterdam-local date: the ENTSO-E fetch runs to the instant now, and between 00:00 and 01:00 local (00:00 to 02:00 in summer) the local date is already ahead of the UTC date (run 44199925847 failed on the UTC variant).
+  const end = year === LAST_YEAR ? dayKey(now.getTime()) : `${year}-12-31`;
   // One request at a time, per the pacing rule; never concurrent.
   const price = await fetchJsonPaced(ecUrl("/v2/price", { bzn: "NL", start, end }), { label: `price ${year}` });
   const cbpf = await fetchJsonPaced(ecUrl("/v2/cbpf", { country: ZONE, start, end }), { label: `cbpf ${year}` });

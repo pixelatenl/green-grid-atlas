@@ -285,6 +285,22 @@ other zone keeps its energy-charts feed.
   statistics are printed in the probe report figures (`windowAttempts`, `trailingWindowCopies`). A one-off cross-zone solar audit (`scripts/audit-zones.mjs`, energy-charts
   only) checks all 36 score zones' observed solar peak on 2026-06-15 as a share of installed solar AC
   capacity; the pre-fix NL shows about 1 percent.
+- Rolling fetch ends are Amsterdam-local dates (added 2026-11-18). Backfill run 44199925847
+  failed the full-history alignment check with `Error: ENTSO-E UTC->CET/CEST alignment check
+  FAILED for full history: 1 hour keys not present in the reference series (first:
+  2026-11-18T00:60). Aborting; nothing was written.` The key `2026-11-18T00:60` is the DST-safe
+  slot format (local date, local hour, UTC offset in minutes): local hour 00 of 2026-11-18 at
+  UTC+1, a valid slot, not a corrupt timestamp. Cause: the energy-charts price reference ended
+  at the calendar date built from the UTC date of the run instant while the ENTSO-E fetch ended
+  at the instant itself, so between 00:00 and 01:00 local in winter (00:00 to 02:00 in summer)
+  the Amsterdam-local date is one day ahead of the UTC date and the ENTSO-E window reached one
+  local hour beyond the price reference; the alignment check correctly refused, and nothing was
+  written. Rule: rolling fetch ends (energy-charts price/cbpf, Open-Meteo) are Amsterdam-local
+  dates via `dayKey` from `src/grid/amsterdam-time.ts` in `scripts/backfill.mjs`,
+  `scripts/snapshot.mjs` and the probe's alignment reference in `scripts/probe-entsoe.mjs`,
+  while the ENTSO-E fetch stays instant-based (periodEnd = now). The energy-charts end date is
+  inclusive through the full end date in zone-local time, so one local day of coverage is
+  exactly sufficient; the Open-Meteo request is already explicitly timezone Europe/Amsterdam.
 
 ## Snapshot data contract
 

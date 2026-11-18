@@ -103,7 +103,8 @@ async function main() {
   console.log(`Snapshot run for ${ZONE} at ${retrievedAt}`);
 
   const startDate = new Date(now.getTime() - ROLLING_DAYS * 86_400_000).toISOString().slice(0, 10);
-  const endDate = now.toISOString().slice(0, 10);
+  // Rolling fetch end is the Amsterdam-local date: the ENTSO-E fetch runs to the instant now, and between 00:00 and 01:00 local (00:00 to 02:00 in summer) the local date is already ahead of the UTC date (run 44199925847 failed on the UTC variant).
+  const endDate = dayKey(now.getTime());
 
   // One request at a time, fresh (no cache) for the rolling window.
   const price = await fetchJsonPaced(ecUrl("/v2/price", { bzn: "NL", start: startDate, end: endDate }), { label: "price rolling", fresh: true });
