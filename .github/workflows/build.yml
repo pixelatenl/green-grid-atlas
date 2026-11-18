@@ -5,6 +5,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Pushes made with GITHUB_TOKEN (the commit steps of the two data
+  # workflows) do not fire the push event, so a completed run of those
+  # workflows is the deploy signal for data commits; the publish step below
+  # guards on success and on the head branch.
+  workflow_run:
+    workflows:
+      - "Refresh data snapshot"
+      - "ENTSO-E NL probe and one-off backfill"
+    types: [completed]
 
 permissions:
   contents: write
@@ -29,9 +38,27 @@ jobs:
           name: green-grid-atlas-dist
           path: out/
           retention-days: 30
-      # Publish only on pushes to main; skipped on PR runs.
+      # Publish on pushes to main and on successful completions of the data
+      # workflows on main (see the workflow_run trigger above); skipped on PR
+      # runs. For workflow_run events the checkout resolves to the head of the
+      # default branch (no hardcoded ref on the checkout step), which already
+      # carries the bot data commit; head_branch == 'main' keeps completed runs
+      # on PR branches from deploying; a successful probe-only dispatch on
+      # main republishes identical content (harmless); github.ref is
+      # refs/heads/main for these runs, so the concurrency group above already
+      # serializes them with push deploys; the artifact upload step still runs
+      # on all events, only this condition changed.
       - name: Publish static export to the deploy branch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >
+          github.ref == 'refs/heads/main'
+          && (
+            github.event_name == 'push'
+            || (
+              github.event_name == 'workflow_run'
+              && github.event.workflow_run.conclusion == 'success'
+              && github.event.workflow_run.head_branch == 'main'
+            )
+          )
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

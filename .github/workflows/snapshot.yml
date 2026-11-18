@@ -6,9 +6,12 @@ name: Refresh data snapshot
 # Open-Meteo weather overlay and the European score summaries (NL daily from
 # ENTSO-E per-type data, all other zones on the first run of each ISO week
 # from their unchanged energy-charts feed). Writes public/data/snapshot.json
-# and commits it to main, which triggers the build workflow. The backfill
-# (scripts/backfill.mjs) NEVER runs here; it is a one-time local/mini-PC or
-# one-off dispatched job.
+# and commits it to main. That commit is pushed with the workflow token
+# (GITHUB_TOKEN), which does not fire the push event (GitHub suppresses
+# events created by GITHUB_TOKEN), so publishing is triggered by build.yml's
+# workflow_run listener on this workflow's successful completion on main.
+# The backfill (scripts/backfill.mjs) NEVER runs here; it is a one-time
+# local/mini-PC or one-off dispatched job.
 #
 # 12:35 UTC lands after the day-ahead publication (~13:00 CET) in both DST
 # states (CET = UTC+1, CEST = UTC+2).

@@ -3,7 +3,8 @@ name: ENTSO-E NL probe and one-off backfill
 # Probe gate and one-off backfill for the ENTSO-E NL substitution. NEVER
 # scheduled. Two ways in:
 #
-#   - pull_request (opened/synchronize/labeled) against main: runs the
+#   - pull_request (opened/synchronize/labeled) against main whose changed
+#     paths match scripts/**, src/grid/** or this workflow file: runs the
 #     probe gate (scripts/probe-entsoe.mjs) with the ENTSOE_API_TOKEN secret
 #     and prints the full report to the job log; the figures are recorded in
 #     the PR description. If any acceptance criterion fails, this check fails.
@@ -46,10 +47,10 @@ permissions:
 
 jobs:
   probe:
-    # The probe gate runs on every pull_request event and on every dispatch
-    # (either mode), so that a mode=backfill dispatch is gated by the probe
-    # exactly like a labeled PR event (a skipped needed job would skip the
-    # backfill too).
+    # The probe gate runs on path-matching pull_request events and on every
+    # dispatch (either mode), so that a mode=backfill dispatch is gated by the
+    # probe exactly like a labeled PR event (a skipped needed job would skip
+    # the backfill too).
     if: >
       github.event_name == 'pull_request'
       || github.event_name == 'workflow_dispatch'
