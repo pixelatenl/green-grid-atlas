@@ -63,7 +63,7 @@ import {
 } from "./lib-entsoe.mjs";
 import { ecUrl, fetchJsonPaced } from "./lib-fetch.mjs";
 import { bucketHours } from "../src/grid/hourly.ts";
-import { amsterdamLocal, parseTs } from "../src/grid/amsterdam-time.ts";
+import { amsterdamLocal, dayKey, parseTs } from "../src/grid/amsterdam-time.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -362,7 +362,8 @@ async function main() {
   // Hour-by-hour UTC->CET/CEST alignment against the unchanged energy-charts
   // price series over the same trailing window.
   const priceStart = new Date(trailingStart).toISOString().slice(0, 10);
-  const priceEnd = new Date(now).toISOString().slice(0, 10);
+  // Alignment reference end is the Amsterdam-local date: the ENTSO-E trailing window ends at the instant now, and between 00:00 and 01:00 local (00:00 to 02:00 in summer) the local date is already ahead of the UTC date (run 44199925847 failed on the UTC variant).
+  const priceEnd = dayKey(now);
   const price = await fetchJsonPaced(ecUrl("/v2/price", { bzn: "NL", start: priceStart, end: priceEnd }), { label: "price trailing (alignment reference)" });
   const publicPower = await fetchJsonPaced(ecUrl("/v2/public_power", { country: "nl", start: priceStart, end: priceEnd }), { label: "public_power trailing (composition comparison)" });
   const priceSlots = price.ok
