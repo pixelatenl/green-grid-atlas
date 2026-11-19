@@ -1,6 +1,6 @@
 import { FamilyHero } from "@/components/family-hero";
 import { GreenWindowCard } from "@/components/green-window-card";
-import { AtlasHeatmap } from "@/components/atlas-heatmap";
+import { AtlasRhythm } from "@/components/atlas-rhythm";
 import { Chapters } from "@/components/chapters";
 import { RedHoursCard } from "@/components/red-hours-card";
 import { Flows } from "@/components/flows";
@@ -10,6 +10,7 @@ import { Coda } from "@/components/coda";
 import { FamilySection } from "@/components/family-section";
 import { FAMILY } from "@/family";
 import { snapshot, formatNumber } from "@/data/snapshot";
+import { formatDate } from "@/format-date";
 import { formatBand } from "@/grid/green-window";
 
 /*
@@ -54,10 +55,16 @@ export default function Home() {
       <GreenWindowCard />
 
       <FamilySection
-        title={`The atlas: every hour since ${snapshot.composites.years[0]?.year}`}
-        description="Hour by day, what the Dutch grid cost, how renewable it was, and how carbon-heavy: switch layers, periods and the weather overlay. Green outlines mark the green window band, red outlines the red hours."
+        title="The year has a shape"
+        description={
+          <>
+            Every hour of the trailing window, {snapshot.trailing.from ? formatDate(snapshot.trailing.from) : "n/a"}{" "}
+            to {snapshot.trailing.to ? formatDate(snapshot.trailing.to) : "n/a"}, averaged per calendar month and
+            local hour (Europe/Amsterdam). {snapshot.trailing.days.length} days.
+          </>
+        }
       >
-        <AtlasHeatmap />
+        <AtlasRhythm />
       </FamilySection>
 
       <Chapters />

@@ -311,3 +311,17 @@
   --color-gg-risk-watch: var(--gg-risk-watch);
   --color-gg-risk-high: var(--gg-risk-high);
 }
+
+/*
+  Atlas rhythm-grid cells (product-owned). Hover emphasis is a stroke only
+  and annotated cells carry a foreground outline: neither ever changes
+  layout, so nothing grows on hover in either theme.
+*/
+.rhythm-cell:hover {
+  stroke: var(--ring);
+  stroke-width: 1.5;
+}
+.rhythm-annotation {
+  stroke: var(--foreground);
+  stroke-width: 2;
+}

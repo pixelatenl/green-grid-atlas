@@ -3,6 +3,7 @@ import { FamilyHeader } from "@/components/family-header";
 import { SiteFooter } from "@/components/site-footer";
 import { FAMILY } from "@/family";
 import { snapshot, formatNumber } from "@/data/snapshot";
+import { formatDate } from "@/format-date";
 import { formatBand } from "@/grid/green-window";
 
 /*
@@ -17,7 +18,10 @@ const GREEN_WINDOW_TEXT = band
   : "The recurring cheap-and-clean hours of the Dutch grid, computed daily from open data.";
 
 const SITE_TITLE = `${FAMILY.productName} | ${FAMILY.organization}`;
-const SITE_DESCRIPTION = `When is the greenest hour on the Dutch grid? ${GREEN_WINDOW_TEXT} Hour-by-day atlas of price, renewable share and computed carbon intensity since ${snapshot.composites.years[0]?.year}, from energy-charts.info (CC BY 4.0) and Open-Meteo.`;
+const WINDOW_TEXT = `the trailing window ${
+  snapshot.trailing.from ? formatDate(snapshot.trailing.from) : "n/a"
+} to ${snapshot.trailing.to ? formatDate(snapshot.trailing.to) : "n/a"}`;
+const SITE_DESCRIPTION = `When is the greenest hour on the Dutch grid? ${GREEN_WINDOW_TEXT} Month-by-hour rhythm grids of NL day-ahead price and renewable share across ${WINDOW_TEXT}, from energy-charts.info (CC BY 4.0), ENTSO-E and Open-Meteo.`;
 
 const OG_IMAGE_ALT = `The ${FAMILY.productName} in the Pixelate family's display style: the product name, its question, and the open-data credits.`;
 
