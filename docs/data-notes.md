@@ -301,6 +301,14 @@ other zone keeps its energy-charts feed.
   while the ENTSO-E fetch stays instant-based (periodEnd = now). The energy-charts end date is
   inclusive through the full end date in zone-local time, so one local day of coverage is
   exactly sufficient; the Open-Meteo request is already explicitly timezone Europe/Amsterdam.
+- Daily per-type profiles (added 2026-11-19). The daily snapshot run rebuilds the per-type keys of
+  `derived.profiles30d` (`fossil_gas`, `distribution_renewables`, `wind`) by joining the live ENTSO-E
+  NL envelope onto the samples rebuilt from the stored trailing days, because the stored day structure
+  carries no per-type mix. The join keys on the slot's UTC instant through the shared `bucketHours`
+  path (`mixMapFromPowerEnv` in `scripts/lib-snapshot.mjs`), reusing the full-year envelope the run
+  already fetches for the NL score, so no new fetch is added. Hours with a missing envelope entry
+  contribute honest nulls: `profilesFromSamples` counts each key independently, and `wind` is null
+  rather than zero when a sample carries no wind entries.
 
 ## Snapshot data contract
 

@@ -359,6 +359,28 @@ export function riskFromSamples(samples, windowResult) {
   );
 }
 
+/**
+ * Per-type mix map for the daily path: bucket the raw NL generation envelope
+ * records ({ timestamp, values }, the same shape fed to bucketHours elsewhere
+ * in this file) through bucketHours, so the map keys, DST handling and dedup
+ * follow the exact same slot mechanisms as the rest of the pipeline, and
+ * return a Map from UTC instant (the slot's numeric utc) to a mix object
+ * carrying exactly the per-type keys profilesFromSamples reads: fossil_gas,
+ * distribution_renewables, wind_onshore, wind_offshore. Hours where all four
+ * are absent do not appear in the Map; the caller treats a miss as no mix.
+ * Values are taken as served, never rounded or transformed.
+ */
+export function mixMapFromPowerEnv(records) {
+  const MIX_KEYS = ["fossil_gas", "distribution_renewables", "wind_onshore", "wind_offshore"];
+  const mixByUtc = new Map();
+  for (const slot of bucketHours(records).values()) {
+    const mix = Object.fromEntries(MIX_KEYS.map((k) => [k, slot.values[k] ?? null]));
+    if (MIX_KEYS.every((k) => mix[k] == null)) continue;
+    mixByUtc.set(slot.utc, mix);
+  }
+  return mixByUtc;
+}
+
 /** Trailing-30-day average day profiles (24 wall hours) for the chapter visuals. */
 export function profilesFromSamples(samples, daysBack = 30) {
   const now = samples.length ? samples[samples.length - 1].utc : 0;
@@ -376,7 +398,13 @@ export function profilesFromSamples(samples, daysBack = 30) {
       netImport: s.netImport,
       fossil_gas: s.mix?.fossil_gas ?? null,
       distribution_renewables: s.mix?.distribution_renewables ?? null,
-      wind: (s.mix?.wind_onshore ?? 0) + (s.mix?.wind_offshore ?? 0),
+      // Wind counts only when the sample carries a mix with at least one wind
+      // entry; an absent mix or both wind entries absent is an honest null,
+      // not a zero (the backfill path always carries a full mix).
+      wind:
+        s.mix && (s.mix.wind_onshore != null || s.mix.wind_offshore != null)
+          ? (s.mix.wind_onshore ?? 0) + (s.mix.wind_offshore ?? 0)
+          : null,
       residual: s.residualLoad,
     };
     for (const k of keys) {

@@ -41,6 +41,7 @@ import {
   windowFromSamples,
   riskFromSamples,
   profilesFromSamples,
+  mixMapFromPowerEnv,
   computeScore,
   dailyRenewableShareOfLoadFromSlots,
   slotsFromEnvelopes,
@@ -66,8 +67,13 @@ function isoWeek(d) {
   return 1 + Math.round((date - firstThursday) / (7 * 86_400_000));
 }
 
-/** Rebuild hourly samples from the stored trailing days (rounded values = what the page renders). */
-function samplesFromStoredTrailing(trailing) {
+/**
+ * Rebuild hourly samples from the stored trailing days (rounded values = what
+ * the page renders). The stored day structure carries no per-type mix, so each
+ * sample's mix is joined from the live ENTSO-E NL envelope by UTC instant;
+ * a sample whose utc has no envelope entry keeps mix: null.
+ */
+function samplesFromStoredTrailing(trailing, mixByUtc) {
   const samples = [];
   for (const day of trailing.days) {
     const seq = dayHourSequence(day.dst);
@@ -88,7 +94,7 @@ function samplesFromStoredTrailing(trailing) {
           day.windMW != null || day.distributionRenewablesMW != null
             ? (day.windMW?.[i] ?? 0) + (day.distributionRenewablesMW?.[i] ?? 0)
             : null,
-        mix: null,
+        mix: mixByUtc?.get(utc) ?? null,
       });
     });
   }
@@ -159,7 +165,14 @@ async function main() {
   const trailing = { from: days[0]?.date ?? null, to: days[days.length - 1]?.date ?? null, days };
 
   // Derived from the merged trailing window (same code path as the page).
-  const samples = samplesFromStoredTrailing(trailing);
+  // The stored trailing days carry no per-type mix, so join the full-year
+  // ENTSO-E NL envelope (already fetched above for the score) onto the
+  // rebuilt samples by UTC instant; hours without an envelope entry keep
+  // mix: null and contribute nothing to the per-type profile keys.
+  const mixByUtc = mixMapFromPowerEnv(
+    entsoe.envelope.data.map((r) => ({ timestamp: r.timestamp, values: r.values })),
+  );
+  const samples = samplesFromStoredTrailing(trailing, mixByUtc);
   const window = windowFromSamples(samples, 30);
   const risk = riskFromSamples(samples, window);
   const profiles = profilesFromSamples(samples, 30);
