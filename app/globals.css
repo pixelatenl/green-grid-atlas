@@ -185,6 +185,9 @@
     background-image: var(--body-splash);
     background-attachment: fixed;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* full-bleed blocks (the extremes photo) use w-screen; clip the
+       scrollbar-width overflow so no horizontal scrollbar appears */
+    overflow-x: clip;
   }
 }
 
@@ -264,6 +267,40 @@
   --gg-risk-calm: #2b8ba3;
   --gg-risk-watch: #a64b0c;
   --gg-risk-high: #f48822;
+
+  /*
+    Day-profile bar series colors. Each pair is anchored to a sanctioned
+    ramp family in src/grid/layer-scales.ts (hex anchors reused verbatim)
+    and keeps WCAG AA (4.5 to 1 or better) against the light card
+    #f6fbfc, per theme:
+    - --gg-bar-gas: the amber family of the weather-solar ramp, anchor
+      range #f5b04c into #a64b0c. Light uses the ramp's dark anchor
+      #a64b0c (5.54 to 1); dark uses the ramp's mid anchor #f5b04c
+      (5.92 to 1 on the dark card).
+    - --gg-bar-renewables: the green family of the renewables ramp
+      (#4ade80 into #15803d). Light #15803d (4.81 to 1); dark #4ade80
+      (6.38 to 1).
+    - --gg-bar-load: the blue family at the price ramp's low end
+      (#1e3a8a into #93c5fd). Light #1e3a8a (9.93 to 1); dark #93c5fd
+      (6.16 to 1).
+    - --gg-bar-wind: the cyan family of the weather-wind ramp
+      (#6fc3d8 into #0f353d). Light #0f353d (12.60 to 1); dark #6fc3d8
+      (5.54 to 1).
+  */
+  --gg-bar-gas: #a64b0c;
+  --gg-bar-renewables: #15803d;
+  --gg-bar-load: #1e3a8a;
+  --gg-bar-wind: #0f353d;
+
+  /*
+    Overlay line in the day profiles: the theme foreground at about 70
+    percent over the card surface, written as a solid value so the
+    contrast is well defined and AA in both themes: #4d585a (7.04 to 1
+    on the light card), #a9c0c5 in dark (5.84 to 1 on the dark card).
+    Replaces the brand accent on overlays; the accent stays for links,
+    highlights and the NL ranking row.
+  */
+  --gg-chart-overlay: #4d585a;
 }
 
 .dark {
@@ -290,6 +327,14 @@
   --gg-risk-calm: #6fd0e2;
   --gg-risk-watch: #f48822;
   --gg-risk-high: #f48822;
+
+  /* Dark values of the day-profile series tokens; see :root for the ramp
+     anchors and the per-theme contrast rationale. */
+  --gg-bar-gas: #f5b04c;
+  --gg-bar-renewables: #4ade80;
+  --gg-bar-load: #93c5fd;
+  --gg-bar-wind: #6fc3d8;
+  --gg-chart-overlay: #a9c0c5;
 }
 
 @theme inline {
@@ -310,6 +355,11 @@
   --color-gg-risk-calm: var(--gg-risk-calm);
   --color-gg-risk-watch: var(--gg-risk-watch);
   --color-gg-risk-high: var(--gg-risk-high);
+  --color-gg-bar-gas: var(--gg-bar-gas);
+  --color-gg-bar-renewables: var(--gg-bar-renewables);
+  --color-gg-bar-load: var(--gg-bar-load);
+  --color-gg-bar-wind: var(--gg-bar-wind);
+  --color-gg-chart-overlay: var(--gg-chart-overlay);
 }
 
 /*
@@ -324,4 +374,49 @@
 .rhythm-annotation {
   stroke: var(--foreground);
   stroke-width: 2;
+}
+
+/*
+  Shared chart tooltip affordances (product-owned), used by the one
+  ChartTooltip island (components/chart-tooltip.tsx).
+
+  - .chart-hit: wide invisible hit strips overlaid on the charts, at
+    least one per bar or day, full chart height. No fill, pointer-events
+    all, so cursor snapping and touch taps land on the nearest datum
+    without pixel precision; they overlay the chart and never change
+    layout.
+  - .chart-pannable: touch-action pan-y on chart containers, so a
+    touch-drag still scrolls the page normally while taps show the
+    tooltip. The rhythm islands opt out (their grids scroll pan-x).
+  - .chart-tip-active: the touch-active datum. Emphasis is stroke or
+    outline only, so activation never grows, moves or reflows anything.
+  - svg hover emphasis on chart triggers is stroke-only as well.
+*/
+.chart-hit {
+  fill: none;
+  pointer-events: all;
+}
+.chart-pannable {
+  touch-action: pan-y;
+}
+.chart-tip-active {
+  stroke: var(--ring);
+  stroke-width: 1.5;
+}
+div.chart-tip-active {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+svg .chart-tooltip-trigger:hover {
+  stroke: var(--ring);
+  stroke-width: 1.5;
+}
+
+/*
+  Scrim over the extremes photo: a gradient from the page background
+  tone into transparency, so the photo blends into the section in both
+  themes (the token carries the right value per theme).
+*/
+.coda-scrim {
+  background: linear-gradient(to bottom, var(--background) 0%, transparent 42%);
 }

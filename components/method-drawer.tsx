@@ -228,6 +228,39 @@ export function MethodDrawer() {
         </section>
 
         <section>
+          <h3 className="font-semibold text-foreground">Chart axes</h3>
+          <p className="mt-1">
+            Every bar chart carries one left y-axis computed at build time from its own series: zero sits at
+            the baseline, the top tick is the series maximum rounded up to a human step from the 1, 2, 5 family,
+            with three to five tick values, and the unit is stated once per axis (MW for the day profiles, GW
+            for the flow timelines, TWh for the volume bars). The overlay line in the day profiles is scaled to
+            its own maximum, so it deliberately does not share the bar axis; its exact values appear in the
+            tooltip on hover, keyboard focus or tap.
+          </p>
+        </section>
+
+        <section>
+          <h3 className="font-semibold text-foreground">Chart interaction</h3>
+          <p className="mt-1">
+            One shared tooltip (a single client component, components/chart-tooltip.tsx) follows the cursor over
+            every chart and snaps to the nearest datum. On keyboard focus of a chart element the tooltip appears
+            anchored to that element; on touch devices a tap positions it at the tapped datum and marks it active,
+            a tap on another datum moves it, and a tap outside the chart or any scroll dismisses it. The tooltip
+            is aria-hidden and visual only; every chart element keeps its own aria-label as the screen-reader
+            channel. Hover and touch emphasis is stroke-only, so no interaction ever changes the layout.
+          </p>
+        </section>
+
+        <section>
+          <h3 className="font-semibold text-foreground">Closing photo asset</h3>
+          <p className="mt-1">
+            The photo in the extremes section is self-hosted (public/images/rampion-offshore-wind.jpg, a resized
+            JPEG, no external URL at page load): “white electic windmill” by Nicholas Doherty on Unsplash (Rampion
+            Offshore Wind Farm, United Kingdom), under the Unsplash License.
+          </p>
+        </section>
+
+        <section>
           <h3 className="font-semibold text-foreground">AI disclosure</h3>
           <p className="mt-1">
             The “AI insight (Experimental)” captions are generated at snapshot time by Mistral

@@ -179,12 +179,11 @@ function RhythmFigure({
                 return (
                   <rect
                     key={hh}
-                    data-rhythm-cell
-                    data-month={`${m.label}${m.partial ? "*" : ""}`}
-                    data-hour={hourRangeLabel(hh)}
-                    data-title={tipTitle}
-                    data-value={c.value == null ? "no data" : ramp.format(c.value)}
-                    data-qualifier={qualifier}
+                    data-tip-visual
+                    data-tip-heading={`${m.label}${m.partial ? "*" : ""} · ${hourRangeLabel(hh)}`}
+                    data-tip-title={tipTitle}
+                    data-tip-value={c.value == null ? "no data" : ramp.format(c.value)}
+                    data-tip-qualifier={qualifier}
                     x={gutter + hh * (cell + gap)}
                     y={top + mi * (cellH + gap)}
                     width={cell}

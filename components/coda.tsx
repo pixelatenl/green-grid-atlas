@@ -1,15 +1,27 @@
 import { snapshot, formatNumber } from "@/data/snapshot";
 import { narrationFor } from "@/data/narration";
-import { FamilySection } from "@/components/family-section";
+import { Card, CardDescription, CardHeader } from "@/components/ui/card";
+import { SectionHeading } from "@/components/family-section";
 import { AiInsight } from "@/components/ai-insight";
 import { EMISSION_FACTORS, PRODUCTION_TYPES } from "@/grid/emission-factors";
 import { formatBand } from "@/grid/green-window";
 import { formatDate } from "@/format-date";
 
 /*
-  Coda, "The extremes": the dirtiest versus cleanest hour on record side by
-  side, then the stat row of records, each with timestamp and production
-  mix. Humor lives in the framing only; every figure is a snapshot field.
+  Coda, "The extremes": the section title stays in normal flow, directly
+  below it a full-bleed self-hosted photo of an offshore wind farm (edge
+  to edge, ignoring the page container's horizontal padding), with the
+  dirtiest versus cleanest hour cards bottom-aligned on the photo. Below
+  the photo, on the normal background, the stat row of records and the
+  closing greenest-hour paragraph. Humor lives in the framing only;
+  every figure is a snapshot field.
+
+  The photo is "white electic windmill" by Nicholas Doherty on Unsplash
+  (Rampion Offshore Wind Farm, United Kingdom, Unsplash License),
+  downloaded once, resized and self-hosted at
+  public/images/rampion-offshore-wind.jpg; no external URL is fetched at
+  page load. The scrim blends the photo's top edge into the page
+  background tone in both themes.
 */
 
 function MixBar({ mix }: { mix: Record<string, number | null> | undefined }) {
@@ -59,39 +71,79 @@ export function Coda() {
   }`;
 
   return (
-    <FamilySection
-      title={
-        <>
-          The extremes: <span className="text-brand-accent">best and worst of the record</span>
-        </>
-      }
-      description="The dirtiest and cleanest hours ever recorded on the Dutch grid, then the full record set."
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-gg-red-band/50 bg-gg-red-band-soft p-4">
-          <p className="text-xs font-semibold tracking-widest text-gg-red-band uppercase">Dirtiest hour on record</p>
-          <p className="mt-1 text-3xl font-black tabular-nums tracking-tight">
-            {dirtiest ? formatNumber(dirtiest.value, 0) : "n/a"}
-            <span className="ml-1 text-sm font-semibold text-muted-foreground">g CO2-eq/kWh</span>
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {dirtiest?.localLabel}: computed intensity, generation-mix basis (imports not attributed)
-          </p>
-          <MixBar mix={dirtiest?.mix} />
+    <section className="mb-12">
+      <Card>
+        <CardHeader>
+          <SectionHeading>
+            The extremes: <span className="text-brand-accent">best and worst of the record</span>
+          </SectionHeading>
+          <CardDescription>
+            The dirtiest and cleanest hours ever recorded on the Dutch grid, then the full record set.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+
+      {/* full-bleed photo: edge to edge, ignoring the page container's
+          horizontal padding; w-screen + left-1/2 -translate-x-1/2 centers
+          it on the viewport from inside the centered container */}
+      <div className="relative left-1/2 mt-6 w-screen -translate-x-1/2">
+        <img
+          src="/images/rampion-offshore-wind.jpg"
+          alt="Rows of offshore wind turbines standing in the sea under a clear blue sky at the Rampion Offshore Wind Farm, United Kingdom"
+          width={2200}
+          height={1426}
+          loading="lazy"
+          decoding="async"
+          className="h-[68vh] min-h-[440px] w-full object-cover object-[55%_76%]"
+        />
+        {/* scrim: page background tone into transparency, both themes via the token */}
+        <div aria-hidden="true" className="coda-scrim absolute inset-0" />
+        {/* dirtiest vs cleanest hour, bottom aligned on the photo, side
+            by side on wide screens, stacked on small ones; solid card
+            surfaces so AA contrast over the photo holds in both themes */}
+        <div className="absolute inset-x-0 bottom-0">
+          <div className="mx-auto grid max-w-[1536px] gap-4 px-4 pb-9 sm:grid-cols-2 sm:px-6">
+            <div className="rounded-xl border border-gg-red-band/50 bg-card p-4">
+              <p className="text-xs font-semibold tracking-widest text-gg-red-band uppercase">Dirtiest hour on record</p>
+              <p className="mt-1 text-3xl font-black tabular-nums tracking-tight">
+                {dirtiest ? formatNumber(dirtiest.value, 0) : "n/a"}
+                <span className="ml-1 text-sm font-semibold text-muted-foreground">g CO2-eq/kWh</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {dirtiest?.localLabel}: computed intensity, generation-mix basis (imports not attributed)
+              </p>
+              <MixBar mix={dirtiest?.mix} />
+            </div>
+            <div className="rounded-xl border border-gg-green-band/50 bg-card p-4">
+              <p className="text-xs font-semibold tracking-widest text-gg-green-band uppercase">Cleanest hour on record</p>
+              <p className="mt-1 text-3xl font-black tabular-nums tracking-tight">
+                {cleanest ? formatNumber(cleanest.value, 0) : "n/a"}
+                <span className="ml-1 text-sm font-semibold text-muted-foreground">g CO2-eq/kWh</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {cleanest?.localLabel}: computed intensity, generation-mix basis (imports not attributed)
+              </p>
+              <MixBar mix={cleanest?.mix} />
+            </div>
+          </div>
         </div>
-        <div className="rounded-xl border border-gg-green-band/50 bg-gg-green-band-soft p-4">
-          <p className="text-xs font-semibold tracking-widest text-gg-green-band uppercase">Cleanest hour on record</p>
-          <p className="mt-1 text-3xl font-black tabular-nums tracking-tight">
-            {cleanest ? formatNumber(cleanest.value, 0) : "n/a"}
-            <span className="ml-1 text-sm font-semibold text-muted-foreground">g CO2-eq/kWh</span>
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {cleanest?.localLabel}: computed intensity, generation-mix basis (imports not attributed)
-          </p>
-          <MixBar mix={cleanest?.mix} />
-        </div>
+        <p className="absolute bottom-2 right-3 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground">
+          Photo by{" "}
+          <a className="underline underline-offset-2 hover:text-foreground" href="https://unsplash.com/@nrdoherty">
+            Nicholas Doherty
+          </a>{" "}
+          on{" "}
+          <a
+            className="underline underline-offset-2 hover:text-foreground"
+            href="https://unsplash.com/photos/white-electic-windmill-pONBhDyOFoM"
+          >
+            Unsplash
+          </a>
+        </p>
       </div>
 
+      {/* the record row and the closing paragraph stay below the photo,
+          on the normal background */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <RecordStat recordKey="highestPrice" note="The market really said no." />
         <RecordStat recordKey="mostNegativePrice" note="They paid you to take it." />
@@ -112,6 +164,6 @@ export function Coda() {
         )}
       </p>
       {narration && <AiInsight text={narration} />}
-    </FamilySection>
+    </section>
   );
 }
