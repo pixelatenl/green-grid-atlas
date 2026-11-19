@@ -185,9 +185,6 @@
     background-image: var(--body-splash);
     background-attachment: fixed;
     font-feature-settings: "rlig" 1, "calt" 1;
-    /* full-bleed blocks (the extremes photo) use w-screen; clip the
-       scrollbar-width overflow so no horizontal scrollbar appears */
-    overflow-x: clip;
   }
 }
 
@@ -413,10 +410,55 @@ svg .chart-tooltip-trigger:hover {
 }
 
 /*
-  Scrim over the extremes photo: a gradient from the page background
-  tone into transparency, so the photo blends into the section in both
-  themes (the token carries the right value per theme).
+  Coda photo stage (product-owned). The stage is a rounded, full-width
+  block inside the page container; the photo is its background and all
+  editorial content (kicker chip, h2 headline, deck, the pair, the stat
+  row) is bottom-anchored over a dark scrim, so the scrim is one
+  theme-independent dark gradient used in BOTH themes and the text over
+  it is white in both themes.
+
+  Contrast math (worst case: the brightest possible photo pixel, pure
+  white sky, under the weakest scrim stop): the veil color rgb(4 16 18)
+  at 82 percent over white composites to about #313B3D (relative
+  luminance about 0.031), which gives white text 13.0:1, white at 70
+  percent 7.2:1, and the bright brand orange #F48822 5.2:1. Every stop
+  is at least 82 percent, so all text over the photo passes WCAG AA in
+  both themes at every position. Below the sm breakpoint the scrim is
+  strengthened further (the fleet coda needed exactly that fix), so
+  stacked content on phones keeps the same ratios.
 */
 .coda-scrim {
-  background: linear-gradient(to bottom, var(--background) 0%, transparent 42%);
+  background: linear-gradient(
+    to top,
+    rgba(4, 16, 18, 0.97) 0%,
+    rgba(4, 16, 18, 0.94) 45%,
+    rgba(4, 16, 18, 0.88) 72%,
+    rgba(4, 16, 18, 0.82) 100%
+  );
+}
+@media (max-width: 639px) {
+  .coda-scrim {
+    background: linear-gradient(
+      to top,
+      rgba(4, 16, 18, 0.98) 0%,
+      rgba(4, 16, 18, 0.96) 50%,
+      rgba(4, 16, 18, 0.92) 78%,
+      rgba(4, 16, 18, 0.9) 100%
+    );
+  }
+}
+
+/*
+  Token scoping inside the coda stage: the photo content sits on the dark
+  scrim, so inside .coda-stage the family brand accent and the green/red
+  band tones resolve to their bright values in both themes. The light
+  theme's --brand-accent (#A64B0C) tops out at 3.6:1 against pure black
+  and can never pass on a dark scrim; #F48822 reaches 5.2:1 or better on
+  the weakest scrim stop. Same for the band tones (#F48822, #6FD0E2).
+  Outside the stage the tokens are untouched.
+*/
+.coda-stage {
+  --brand-accent: #f48822;
+  --gg-red-band: #f48822;
+  --gg-green-band: #6fd0e2;
 }

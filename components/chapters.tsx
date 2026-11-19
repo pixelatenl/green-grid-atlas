@@ -97,6 +97,27 @@ function DayProfile({
   const opeak = ovals.length ? Math.max(...ovals) : null;
   // Guard the divisor: an all-zero overlay would make v/omax NaN.
   const omax = opeak != null && opeak > 0 ? opeak : 1;
+  // Overlay path points and peak hour, computed once for the line, the
+  // halo underneath it and the peak dot.
+  const overlayPts = (overlay ?? [])
+    .map((v, h) => {
+      if (typeof v !== "number" || !Number.isFinite(v)) return null;
+      const x = plotLeft + h * bw + bw / 2;
+      const y = plotBottom - (v / omax) * plotH;
+      return `${x},${y}`;
+    })
+    .filter(Boolean)
+    .join(" ");
+  let peakHour = -1;
+  let peakVal = -Infinity;
+  (overlay ?? []).forEach((v, h) => {
+    if (typeof v === "number" && Number.isFinite(v) && v > peakVal) {
+      peakVal = v;
+      peakHour = h;
+    }
+  });
+  const peakX = plotLeft + peakHour * bw + bw / 2;
+  const peakY = plotBottom - (peakVal / omax) * plotH;
   const summary = `${seriesLabel} by hour of an average day over the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days. Peak ${
     peak != null ? `${formatNumber(peak, 0)} ${seriesUnit}` : "no data"
   }${overlay && overlayLabel && opeak != null ? `; ${overlayLabel} peaks at ${formatNumber(opeak, 1)} ${overlayUnit}` : ""}.`;
@@ -144,21 +165,36 @@ function DayProfile({
           );
         })}
         {overlay && (
-          <polyline
-            fill="none"
-            stroke="var(--gg-chart-overlay)"
-            strokeWidth="2"
-            points={overlay
-              .map((v, h) => {
-                if (typeof v !== "number" || !Number.isFinite(v)) return null;
-                const x = plotLeft + h * bw + bw / 2;
-                const y = plotBottom - (v / omax) * plotH;
-                return `${x},${y}`;
-              })
-              .filter(Boolean)
-              .join(" ")}
-            aria-label={overlayLabel ?? ""}
-          />
+          <>
+            {/* Halo first: the same path painted in the card surface color
+                before the line draws, so the overlay separates from every
+                bar fill it crosses in both themes. strokeWidth 5 and the
+                dot radii are sanctioned geometry constants; the halo is
+                static geometry (pointer-events none, aria-hidden), so it
+                cannot affect layout or interaction. */}
+            <polyline
+              fill="none"
+              stroke="var(--card)"
+              strokeWidth={5}
+              strokeLinecap="round"
+              points={overlayPts}
+              aria-hidden="true"
+              pointerEvents="none"
+            />
+            {peakHour >= 0 && (
+              <circle cx={peakX} cy={peakY} r={5} fill="var(--card)" aria-hidden="true" pointerEvents="none" />
+            )}
+            <polyline
+              fill="none"
+              stroke="var(--gg-chart-overlay)"
+              strokeWidth="2"
+              points={overlayPts}
+              aria-label={overlayLabel ?? ""}
+            />
+            {peakHour >= 0 && (
+              <circle cx={peakX} cy={peakY} r={2.5} fill="var(--gg-chart-overlay)" aria-hidden="true" pointerEvents="none" />
+            )}
+          </>
         )}
         {/* wide invisible hit strips, one per hour, full chart height:
             cursor snapping and touch taps land on these */}
@@ -231,7 +267,7 @@ export function Chapters() {
       <Chapter
         id="morningGasRamp"
         title="The gas day"
-        description="What the average day does to gas-fired plants and prices: gas fills the gap between demand and clean supply, dips when clean supply is high, and rises again when demand picks up. The computed sentence carries every specific number and hour."
+        description="What the average day does to gas-fired plants and prices: gas fills the gap between demand and clean supply, dips when clean supply is high, and rises again when demand picks up."
         headline={
           <>
             Between {hh(gasMin.hour)} and {hh(gasPeak.hour)}, average gas-fired output climbs from{" "}
@@ -256,7 +292,7 @@ export function Chapters() {
       <Chapter
         id="solarValley"
         title="The daylight renewables valley"
-        description="Distribution-connected renewables flood the grid in the sunny hours and prices sag with them. The computed sentence carries every specific number and hour."
+        description="Distribution-connected renewables flood the grid in the sunny hours and prices sag with them."
         headline={
           <>
             Daylight renewables peak at <span className="tabular-nums">{formatNumber(daylightRenewablesPeak.value, 0)} MW</span> around{" "}
@@ -281,7 +317,7 @@ export function Chapters() {
       <Chapter
         id="eveningPeak"
         title="The evening peak"
-        description="At the daily demand peak, prices follow and imports fill the gap. The computed sentence carries every specific number and hour."
+        description="At the daily demand peak, prices follow and imports fill the gap."
         headline={
           <>
             Load peaks at <span className="tabular-nums">{formatNumber(loadPeak.value, 0)} MW</span> at{" "}
@@ -306,7 +342,7 @@ export function Chapters() {
       <Chapter
         id="windNight"
         title="The wind workhorse"
-        description="Wind is the workhorse of the Dutch grid whenever it blows: high renewable share, low computed intensity, low prices. The computed sentence carries every specific number and hour."
+        description="Wind is the workhorse of the Dutch grid whenever it blows: high renewable share, low computed intensity, low prices."
         headline={
           <>
             Wind reaches <span className="tabular-nums">{formatNumber(windPeak.value, 0)} MW</span> at {hh(windPeak.hour)},
