@@ -4,6 +4,7 @@ import { FamilySection } from "@/components/family-section";
 import { AiInsight } from "@/components/ai-insight";
 import { EMISSION_FACTORS, PRODUCTION_TYPES } from "@/grid/emission-factors";
 import { formatBand } from "@/grid/green-window";
+import { formatDate } from "@/format-date";
 
 /*
   Coda, "The extremes": the dirtiest versus cleanest hour on record side by
@@ -53,6 +54,9 @@ export function Coda() {
   const cleanest = snapshot.records.find((r) => r.key === "cleanestHour");
   const band = snapshot.greenWindow.green.modalBand;
   const narration = narrationFor("coda");
+  const windowText = `${snapshot.trailing.from ? formatDate(snapshot.trailing.from) : "n/a"} to ${
+    snapshot.trailing.to ? formatDate(snapshot.trailing.to) : "n/a"
+  }`;
 
   return (
     <FamilySection
@@ -101,10 +105,10 @@ export function Coda() {
         {band ? (
           <>
             Usually <strong>{formatBand(band)}</strong>: cheap and renewable at once. The atlas above has every
-            hour since {snapshot.composites.years[0]?.year} to back that up.
+            hour of the trailing window, {windowText}, to back that up.
           </>
         ) : (
-          <>The atlas above has every hour since {snapshot.composites.years[0]?.year}; the pattern is yours to read.</>
+          <>The atlas above has every hour of the trailing window, {windowText}; the pattern is yours to read.</>
         )}
       </p>
       {narration && <AiInsight text={narration} />}

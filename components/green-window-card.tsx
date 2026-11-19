@@ -74,7 +74,7 @@ export function GreenWindowCard() {
       <p className="mt-2 text-xs text-muted-foreground">
         All times Europe/Amsterdam. The band shown is the modal recurring band of the trailing{" "}
         {gw.green.days} days ({nf.format(gw.green.days)} days, each hour an independent sample);
-        single qualifying hours appear on the heatmap below but do not form the window.
+        single qualifying hours do not form the window.
       </p>
       {narration && <AiInsight text={narration} />}
     </FamilySection>

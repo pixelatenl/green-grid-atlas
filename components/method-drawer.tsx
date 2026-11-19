@@ -199,11 +199,31 @@ export function MethodDrawer() {
         </section>
 
         <section>
+          <h3 className="font-semibold text-foreground">The atlas rhythm grids</h3>
+          <p className="mt-1">
+            The atlas card renders month-by-hour rhythm grids over the trailing window (
+            {snapshot.trailing.from ? formatDate(snapshot.trailing.from) : "n/a"} to{" "}
+            {snapshot.trailing.to ? formatDate(snapshot.trailing.to) : "n/a"},{" "}
+            {snapshot.trailing.days.length} days): each cell is the mean of that local hour across all days
+            of that calendar month present in the trailing window, computed at build time from the
+            snapshot's trailing days. The slot-to-hour mapping uses the existing DST wall-hour sequence, so
+            the 23-hour spring-forward day contributes no 02:00 sample and the 25-hour fall-back day
+            contributes both of its 02:00 slots to the 02:00 cell (wall-hour collapse; nothing is silently
+            shifted). Months are calendar months across the window, and the two edge months are partial,
+            cut by the window's first and last day. Colour domains are the min and max of each grid's own
+            cells, computed at build time: the price scale positions values by the square root of the
+            domain position so spike hours do not wash out the normal range, the renewable-share scale is
+            linear, and the legend ticks are rounded values computed from that domain.
+          </p>
+        </section>
+
+        <section>
           <h3 className="font-semibold text-foreground">Suppression and gap rendering</h3>
           <p className="mt-1">
             Missing or suppressed source values are stored as null and rendered as grey gap cells with a "no
-            data" label, never as zero, never interpolated. The heatmap colour scale spans the 5th–95th
-            percentile of the displayed values; the legend prints both ends.
+            data" label, never as zero, never interpolated. The rhythm-grid colour scales span the min to
+            max of each grid's own cells, computed at build time; the legend prints rounded tick values
+            chosen from that domain.
           </p>
         </section>
 
