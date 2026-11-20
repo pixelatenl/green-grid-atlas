@@ -298,17 +298,19 @@
     - --gg-bar-load: the blue family at the price ramp's low end
       (#1e3a8a into #93c5fd). Light #1e3a8a (9.93 to 1); dark #93c5fd
       (6.16 to 1).
-    - --gg-bar-wind: the blue family, with product-owner anchors
-      #1d4ed8 light (6.42 to 1 on the light card #f6fbfc) and #7dd3fc
-      dark (6.66 to 1 on the dark card #14414c); distinct from the gray
+    - --gg-bar-wind: the violet family, with product-owner anchors
+      #6d28d9 light (6.81 to 1 on the light card #f6fbfc) and #ddd6fe
+      dark (8.00 to 1 on the dark card #14414c); distinct from the gray
       overlay line by hue (the line stays #4d585a light and #a9c0c5
-      dark); distinct from the load chapter's indigo family (#1e3a8a
-      light, #93c5fd dark).
+      dark) and from the load chapter's indigo family (#1e3a8a light,
+      #93c5fd dark); the earlier blue anchors (#1d4ed8 light, #7dd3fc
+      dark) read as the same color as the load bars, so they were
+      replaced.
   */
   --gg-bar-gas: #a64b0c;
   --gg-bar-renewables: #15803d;
   --gg-bar-load: #1e3a8a;
-  --gg-bar-wind: #1d4ed8;
+  --gg-bar-wind: #6d28d9;
 
   /*
     Overlay line in the day profiles: the theme foreground at about 70
@@ -359,7 +361,7 @@
   --gg-bar-gas: #f5b04c;
   --gg-bar-renewables: #4ade80;
   --gg-bar-load: #93c5fd;
-  --gg-bar-wind: #7dd3fc;
+  --gg-bar-wind: #ddd6fe;
   --gg-chart-overlay: #a9c0c5;
 }
 
