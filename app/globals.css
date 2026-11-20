@@ -536,6 +536,19 @@ svg .chart-tooltip-trigger:hover {
 }
 
 /*
+  Wide-heading variant for section titles that carry a derived phrase
+  (the green window title plus its season phrase, e.g. "The green window
+  in late fall"). The scale's 18ch cap is unlayered on purpose, so this
+  override is a documented same-element rule, not a component utility:
+  with max-width lifted, the heading spans the full card content width,
+  so the title stays on a single line whenever that width is enough and
+  wraps naturally when it is not.
+*/
+.gg-heading.gg-heading-wide {
+  max-width: none;
+}
+
+/*
   Statement, level 3: the ONE shared statement level for every derived
   in-card sentence (the green window statement, the red hours
   statement, each chapter headline, the coda stage headline). Replaces

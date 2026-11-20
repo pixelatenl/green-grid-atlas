@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import {
   Card,
   CardContent,
@@ -8,11 +9,19 @@ import {
 /**
  * The family section heading pattern: the display heading of a data
  * section: primary token in light, white in dark, with the heavy
- * weight and tight tracking the family pages use.
+ * weight and tight tracking the family pages use. className is only
+ * for documented scale overrides (e.g. gg-heading-wide), never for
+ * ad-hoc size, weight, leading or tracking.
  */
-export function SectionHeading({ children }: { children: React.ReactNode }) {
+export function SectionHeading({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <h2 className="gg-heading">
+    <h2 className={cn("gg-heading", className)}>
       {children}
     </h2>
   );
@@ -31,6 +40,7 @@ export function FamilySection({
   title,
   description,
   contentClassName,
+  headingClassName,
   children,
 }: {
   /** Section title, rendered with the SectionHeading pattern. */
@@ -39,13 +49,15 @@ export function FamilySection({
   description?: React.ReactNode;
   /** Optional additional classes on the card body. */
   contentClassName?: string;
+  /** Optional documented scale override for the heading (e.g. gg-heading-wide). */
+  headingClassName?: string;
   children: React.ReactNode;
 }) {
   return (
     <section className="mb-12">
       <Card>
         <CardHeader>
-          <SectionHeading>{title}</SectionHeading>
+          <SectionHeading className={headingClassName}>{title}</SectionHeading>
           {description && <CardDescription className="gg-lede mt-1">{description}</CardDescription>}
         </CardHeader>
         <CardContent className={contentClassName}>{children}</CardContent>

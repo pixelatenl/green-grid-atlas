@@ -195,7 +195,13 @@ export function GreenWindowCard() {
   };
 
   return (
+    /* The season phrase makes this title longer than the .gg-heading
+       18ch scale cap, so this one heading uses the documented
+       gg-heading-wide override: it spans the full card content width
+       and stays on one line whenever that width is enough, wrapping
+       naturally when it is not. */
     <FamilySection
+      headingClassName="gg-heading-wide"
       title={
         <>
           The <span className="text-brand-accent">green window</span> {seasonPhrase}
