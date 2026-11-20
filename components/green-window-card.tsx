@@ -20,16 +20,16 @@ import { ChartTooltip } from "@/components/chart-tooltip";
   unmistakably green in both themes (contrast per theme, bars are
   graphical objects not text):
   - inside the modal recurring band: solid var(--gg-green-band),
-    light #2b8ba3 on the plot background at 3.58:1, dark #6fd0e2 on the
-    plot background at 7.39:1. The dark value is the bright band tone,
-    so the green is unmistakable exactly where the old 22 percent soft
-    tint was nearly invisible;
+    light #1f8a4e on the plot background at 3.97:1, dark #5fd3a0 on the
+    plot background at 7.08:1;
   - qualifying hours outside the band: the same token at 45 percent
     over the plot background, still distinct from the solid bars
-    (2.12:1 light, 2.70:1 dark between the two greens);
+    (2.24:1 light, 2.67:1 dark between the two greens);
   - zero-count hours: a fixed 2 px stub in the track token
     var(--chart-track), never a hidden or zero-height lie (distinct by
-    its fixed 2 px height and its tone, 1.52:1 light, 2.01:1 dark).
+    its fixed 2 px height and its tone, 1.52:1 light, 2.01:1 dark
+    against the plot background, and 2.61:1 light, 3.53:1 dark next to
+    the solid band green).
   Under the bars a bracket spans exactly the modal band hours, placed
   with percentage math from startHour/endHour, with up-ticks at both
   ends and a centered micro label; one muted gridline at half the plot
@@ -49,7 +49,10 @@ import { ChartTooltip } from "@/components/chart-tooltip";
   p-lines, the basis line and the strip captions are .gg-caption.
 */
 
-const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
+/* Zero-padded hour labels; the band's exclusive end (endHour + 1) can
+   be 24, rendered "24:00", the same label math formatBand uses. */
+const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
+const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => hourLabel(h));
 
 /* Sanctioned strip geometry: the 112 px plot row sits inside the allowed
    96 to 120 px band; the zero-count stub is a fixed 2 px. */
@@ -59,12 +62,60 @@ const ZERO_STUB_H = "2px";
    leaves the strip on narrow screens (half its approx width is 92px). */
 const LABEL_CLAMP = 92;
 
+/*
+  Sanctioned editorial mapping from the band's start hour to the
+  statement's daypart words: a presentation constant, documented here,
+  never tuned per snapshot. Ranges are inclusive start to inclusive
+  end: 0 to 4 "the early night", 5 to 8 "the early morning", 9 to 11
+  "the morning", 12 to 16 "the afternoon", 17 to 19 "the evening",
+  20 to 23 "the night".
+*/
+const DAYPART_BY_START_HOUR: ReadonlyArray<readonly [maxHour: number, label: string]> = [
+  [4, "the early night"],
+  [8, "the early morning"],
+  [11, "the morning"],
+  [16, "the afternoon"],
+  [19, "the evening"],
+  [23, "the night"],
+];
+function daypartFor(startHour: number): string {
+  for (const [maxHour, label] of DAYPART_BY_START_HOUR) {
+    if (startHour <= maxHour) return label;
+  }
+  return "the night";
+}
+
+/*
+  The one seasonal-line threshold: a sanctioned editorial constant,
+  never tuned per snapshot. Below 50 percent frequency share the
+  caption calls the window thin this season; at or above 50 percent it
+  says the window holds up well.
+*/
+const SEASONAL_HOLDS_UP_PCT = 50;
+
 export function GreenWindowCard() {
   const gw = snapshot.greenWindow;
   const band = gw.green.modalBand;
   const days = gw.green.days;
   const sharePct = gw.green.frequencyShare * 100;
   const narration = narrationFor("greenWindow");
+
+  /* The statement's words form: zero-padded labels for the band's
+     inclusive start and exclusive end (endHour + 1). The dashed
+     formatBand range stays the sanctioned label form for the tooltips,
+     aria labels and the red card; the headline uses words, per the
+     product owner's decision. */
+  const bandStartLabel = band ? hourLabel(band.startHour) : "";
+  const bandEndLabel = band ? hourLabel(band.endHour + 1) : "";
+  const daypart = band ? daypartFor(band.startHour) : "";
+
+  /* Seasonal honesty line: the full band's day count derives from
+     frequencyShare * days at build time; never a hardcoded count. */
+  const bandDays = Math.round(gw.green.frequencyShare * days);
+  const seasonalLine =
+    gw.green.frequencyShare * 100 < SEASONAL_HOLDS_UP_PCT
+      ? `The window is thin this season: the full band opened on ${bandDays} of the last ${days} days.`
+      : `The window holds up well: the full band opened on ${bandDays} of the last ${days} days.`;
   const priceP30 = gw.percentiles.priceP30;
   const renP70 = gw.percentiles.renP70;
   const threshold = `green rule: price at or below ${formatNumber(priceP30, 1)} EUR/MWh and renewable share at or above ${formatNumber(renP70, 1)}%`;
@@ -127,16 +178,16 @@ export function GreenWindowCard() {
           The <span className="text-brand-accent">green window</span>
         </>
       }
-      description={`The recurring hours when Dutch power is both cheap and clean, computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days, every figure below straight from the snapshot.`}
+      description={`The recurring hours when Dutch power is both cheap and clean, computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days.`}
     >
       <p className="gg-statement">
         {band ? (
           <>
-            Most days, the greenest hours are{" "}
-            <span className="text-brand-accent">{formatBand(band)}</span>,
-            on{" "}
-            <span className="tabular-nums">{formatNumber(sharePct, 0)}%</span>{" "}
-            of the last {days} days.
+            Power goes green in {daypart}: most often between{" "}
+            <span className="text-brand-accent">
+              {bandStartLabel} and {bandEndLabel}
+            </span>
+            .
           </>
         ) : (
           <>No recurring green band in the last {days} days.</>
@@ -158,7 +209,8 @@ export function GreenWindowCard() {
             <span className="font-medium tabular-nums">{formatNumber(priceP30, 1)} EUR/MWh</span>
           </p>
           <p className="mt-1 gg-caption">
-            p{WINDOW_PARAMS.GREEN_PRICE_PERCENTILE} of the trailing {WINDOW_PARAMS.TRAILING_DAYS} days
+            in the cheapest {WINDOW_PARAMS.GREEN_PRICE_PERCENTILE}% of hours over the trailing{" "}
+            {WINDOW_PARAMS.TRAILING_DAYS} days
           </p>
         </li>
         <li aria-hidden="true" className="flex items-center justify-center">
@@ -171,14 +223,11 @@ export function GreenWindowCard() {
             <span className="font-medium tabular-nums">{formatNumber(renP70, 1)}%</span>
           </p>
           <p className="mt-1 gg-caption">
-            p{WINDOW_PARAMS.GREEN_RENEWABLE_PERCENTILE} of the trailing {WINDOW_PARAMS.TRAILING_DAYS} days
+            in the cleanest {100 - WINDOW_PARAMS.GREEN_RENEWABLE_PERCENTILE}% of hours over the trailing{" "}
+            {WINDOW_PARAMS.TRAILING_DAYS} days
           </p>
         </li>
       </ul>
-      <p className="mt-2 max-w-[62ch] gg-caption">
-        Basis: renewable share of <strong>generation</strong> (NL generation mix); price is the NL day-ahead
-        price. Snapshot-fresh as of {snapshot.retrievedAt.slice(0, 10)}.
-      </p>
 
       {/* per-hour frequency strip on the shared ChartTooltip island */}
       <ChartTooltip labels={HOUR_LABELS} notes={notes}>
@@ -261,12 +310,16 @@ export function GreenWindowCard() {
         </div>
       </ChartTooltip>
 
-      <p className="mt-2 gg-caption">
-        Each bar counts how many of the trailing {days} days that hour met the green rule, counting any
-        qualifying day, lone hours included.{" "}
+      <p className="mt-2 max-w-[62ch] gg-caption">
+        Why these hours: on a dynamic tariff, shifting flexible use such as charging or dishwashing into the
+        window costs less and runs on the grid's most renewable-heavy hours. {seasonalLine} Each bar counts how
+        many of the trailing {days} days that hour met the green rule, counting any qualifying day, lone hours
+        included.{" "}
         {band
           ? `The bracket marks the recurring window: the contiguous band shape most frequent in the trailing days, recurring on ${formatNumber(sharePct, 0)}% of days. `
           : ""}
+        Basis: renewable share of <strong>generation</strong> (NL generation mix); price is the NL day-ahead
+        price. Snapshot-fresh as of {snapshot.retrievedAt.slice(0, 10)}.{" "}
         All times Europe/Amsterdam; each hour is an independent sample; single qualifying hours outside bands
         never form the window.
       </p>
