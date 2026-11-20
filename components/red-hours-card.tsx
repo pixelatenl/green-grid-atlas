@@ -5,7 +5,6 @@ import {
   HOUR_LABELS,
   SEASONAL_HOLDS_UP_PCT,
   bandWords,
-  daypartFor,
   seasonPhraseForMonth,
 } from "@/grid/editorial";
 import { FamilySection } from "@/components/family-section";
@@ -19,10 +18,9 @@ import { ChartTooltip } from "@/components/chart-tooltip";
   at or below the 30th). Every figure derives from the snapshot's
   greenWindow.red (computed by the one rule code path in
   src/grid/green-window.ts); no count, threshold or percentage is
-  hardcoded. The editorial mappings (daypart, season, band words, the
-  50 percent seasonal tier) come from the shared module
-  src/grid/editorial.ts, so this card can never drift from the green
-  card.
+  hardcoded. The editorial mappings (season, band words, the 50 percent
+  seasonal tier) come from the shared module src/grid/editorial.ts, so
+  this card can never drift from the green card.
 
   The strip is the structural mirror of the green strip: 24 bars in the
   sanctioned 240 px plot (h-60), one per wall-clock hour, a bar's height
@@ -77,13 +75,11 @@ export function RedHoursCard() {
   const sharePct = gw.red.frequencyShare * 100;
   const narration = narrationFor("redHours");
 
-  /* The statement's words form: the daypart from the band's start hour
-     and the band words (end hour plus one) from the shared module, the
-     same render path the green statement uses. The dashed formatBand
-     range stays the sanctioned label form for the tooltips and aria
-     labels; the headline uses words, per the product owner's
-     decision. */
-  const daypart = band ? daypartFor(band.startHour) : "";
+  /* The statement's words form: the band words (end hour plus one) from
+     the shared module. The daypart clause is dropped per the 2026-11-20
+     decision. The dashed formatBand range stays the sanctioned label
+     form for the tooltips and aria labels; the headline uses words, per
+     the product owner's decision. */
 
   /* Seasonal honesty line: the full band's day count derives from
      frequencyShare * days at build time; never a hardcoded count. */
@@ -126,7 +122,7 @@ export function RedHoursCard() {
     } the red hours.`;
   const stripAria = `Per-hour frequency strip over the trailing ${days} days: how many days each hour met the red rule. The red hours ${
     band ? formatBand(band) : "are empty"
-  }, on ${formatNumber(sharePct, 0)}% of the trailing ${days} days. Vertical scale: the percentage of the trailing ${days} days on which each hour met the red rule.`;
+  }, opening on ${formatNumber(sharePct, 0)}% of the trailing ${days} days. Vertical scale: the percentage of the trailing ${days} days on which each hour met the red rule.`;
 
   /* Bracket math: the range line spans exactly the modal band hours as
      a percentage of the 24 hour columns. */
@@ -163,7 +159,7 @@ export function RedHoursCard() {
       <p className="gg-statement">
         {band ? (
           <>
-            The priciest, dirtiest hours come in {daypart}: most often between{" "}
+            The priciest, dirtiest hours most often come between{" "}
             <span className="text-brand-accent">{bandWords(band.startHour, band.endHour)}</span>.
           </>
         ) : (
@@ -315,7 +311,7 @@ export function RedHoursCard() {
         window costs less and avoids the grid's most fossil-heavy hours. {seasonalLine} Each bar counts how many
         of the trailing {days} days that hour met the red rule, counting any qualifying day, lone hours included.{" "}
         {band
-          ? `The bracket marks the recurring window: the contiguous band shape most frequent in the trailing days, recurring on ${formatNumber(sharePct, 0)}% of days. `
+          ? `The bracket marks the recurring window: the hours that recur as a group most often, opening on ${formatNumber(sharePct, 0)}% of days. `
           : ""}
         Snapshot-fresh as of {snapshot.retrievedAt.slice(0, 10)}. All times Europe/Amsterdam.
       </p>

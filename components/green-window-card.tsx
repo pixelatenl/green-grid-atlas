@@ -134,7 +134,7 @@ export function GreenWindowCard() {
     } the recurring window.`;
   const stripAria = `Per-hour frequency strip over the trailing ${days} days: how many days each hour met the green rule. The recurring window ${
     band ? formatBand(band) : "is empty"
-  }, on ${formatNumber(sharePct, 0)}% of the trailing ${days} days. Vertical scale: the percentage of the trailing ${days} days on which each hour met the green rule.`;
+  }, opening on ${formatNumber(sharePct, 0)}% of the trailing ${days} days. Vertical scale: the percentage of the trailing ${days} days on which each hour met the green rule.`;
 
   /* Bracket math: the range line spans exactly the modal band hours as
      a percentage of the 24 hour columns. */
@@ -328,7 +328,7 @@ export function GreenWindowCard() {
         many of the trailing {days} days that hour met the green rule, counting any qualifying day, lone hours
         included.{" "}
         {band
-          ? `The bracket marks the recurring window: the contiguous band shape most frequent in the trailing days, recurring on ${formatNumber(sharePct, 0)}% of days. `
+          ? `The bracket marks the recurring window: the hours that recur as a group most often, opening on ${formatNumber(sharePct, 0)}% of days. `
           : ""}
         Snapshot-fresh as of {snapshot.retrievedAt.slice(0, 10)}. All times Europe/Amsterdam.
       </p>
