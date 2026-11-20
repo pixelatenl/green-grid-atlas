@@ -278,6 +278,12 @@ function Chapter({
        the green window and red hours titles, instead of wrapping at
        the .gg-heading 18ch scale cap. */
     <FamilySection title={title} description={description} headingClassName="gg-heading-wide">
+      {/* Divider between the section description (card header) and the
+         derived headline (card body): a 1px rule in the border token,
+         spanning the content width. Static geometry only; the card's
+         own gap-6 sits above it, mb-4 below it. Chapters only: the
+         window cards keep their current header-to-body rhythm. */}
+      <hr className="mb-4 border-t border-border" />
       <p className="gg-headline">{headline}</p>
       {children}
       {narration && <AiInsight text={narration} />}
