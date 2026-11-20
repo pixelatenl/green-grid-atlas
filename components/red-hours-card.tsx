@@ -186,7 +186,7 @@ export function RedHoursCard() {
             <span className="font-medium tabular-nums">{formatNumber(priceP70, 1)} EUR/MWh</span>
           </p>
           <p className="mt-1 gg-caption">
-            pricier than about {100 - WINDOW_PARAMS.RED_PRICE_PERCENTILE}% of hours in the trailing{" "}
+            pricier than about {WINDOW_PARAMS.RED_PRICE_PERCENTILE}% of hours in the trailing{" "}
             {WINDOW_PARAMS.TRAILING_DAYS} days
           </p>
         </li>
