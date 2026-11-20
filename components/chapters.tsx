@@ -123,137 +123,144 @@ function DayProfile({
   }${overlay && overlayLabel && opeak != null ? `; ${overlayLabel} peaks at ${formatNumber(opeak, 1)} ${overlayUnit}` : ""}.`;
   const qualifier = `Average day over the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days; the ${overlayLabel ?? "overlay"} line is scaled to its own maximum`;
   return (
-    <ChartTooltip
-      labels={hourLabels}
-      series={[
-        { name: seriesLabel, unit: seriesUnit, decimals: 0, values: series.map((v) => roundFor(v, 0)) },
-        ...(overlay && overlayLabel && overlayUnit
-          ? [{ name: overlayLabel, unit: overlayUnit, decimals: overlayDecimals, values: overlay.map((v) => roundFor(v, overlayDecimals)) }]
-          : []),
-      ]}
-    >
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="mt-4 w-full"
-        role="img"
-        aria-label={summary}
-        data-tip-root
-        data-units={W}
-        data-x0={plotLeft}
-        data-x1={plotRight}
-        data-tip-series={overlay ? "0,1" : "0"}
-        data-tip-qualifier={qualifier}
+    <>
+      <ChartTooltip
+        labels={hourLabels}
+        series={[
+          { name: seriesLabel, unit: seriesUnit, decimals: 0, values: series.map((v) => roundFor(v, 0)) },
+          ...(overlay && overlayLabel && overlayUnit
+            ? [{ name: overlayLabel, unit: overlayUnit, decimals: overlayDecimals, values: overlay.map((v) => roundFor(v, overlayDecimals)) }]
+            : []),
+        ]}
       >
-        {/* skipTop drops the chart's top border (the topmost gridline);
-            the chapter charts read cleaner without it, and the topmost
-            tick label still renders. Every other YAxis consumer keeps
-            the default and renders byte-identical output. */}
-        <YAxis axis={axis} plotLeft={plotLeft} plotRight={plotRight} plotTop={plotTop} plotBottom={plotBottom} unit={seriesUnit} skipTop />
-        {series.map((v, h) => {
-          const valid = typeof v === "number" && Number.isFinite(v);
-          const height = valid ? (v / axis.hi) * plotH : 0;
-          return (
-            <rect
-              key={h}
-              tabIndex={0}
-              className={`chart-tooltip-trigger ${barClass}`}
-              data-tip={h}
-              data-tip-visual
-              data-cx={plotLeft + h * bw + bw / 2}
-              x={plotLeft + h * bw + 1}
-              y={plotBottom - height}
-              width={Math.max(1, bw - 2)}
-              height={Math.max(0, height)}
-              aria-label={`${hh(h)}, ${seriesLabel} ${valid ? `${formatNumber(v, 0)} ${seriesUnit}` : "no data"}`}
-            />
-          );
-        })}
-        {overlay && (
-          <>
-            {/* Halo first: the same path painted in the card surface color
-                before the line draws, so the overlay separates from every
-                bar fill it crosses in both themes. strokeWidth 5 and the
-                dot radii are sanctioned geometry constants; the halo is
-                static geometry (pointer-events none, aria-hidden), so it
-                cannot affect layout or interaction. */}
-            <polyline
-              fill="none"
-              stroke="var(--card)"
-              strokeWidth={5}
-              strokeLinecap="round"
-              points={overlayPts}
-              aria-hidden="true"
-              pointerEvents="none"
-            />
-            {peakHour >= 0 && (
-              <circle cx={peakX} cy={peakY} r={5} fill="var(--card)" aria-hidden="true" pointerEvents="none" />
-            )}
-            <polyline
-              fill="none"
-              stroke="var(--gg-chart-overlay)"
-              strokeWidth="2"
-              points={overlayPts}
-              aria-label={overlayLabel ?? ""}
-            />
-            {peakHour >= 0 && (
-              <circle cx={peakX} cy={peakY} r={2.5} fill="var(--gg-chart-overlay)" aria-hidden="true" pointerEvents="none" />
-            )}
-            {/* Micro-label pinned at the peak dot, drawn after the dot:
-                the overlay line is normalized to its own maximum (its
-                peak defines the plot top), so without this label the
-                line is unreadable. The label names the line and states
-                its own-scale fact; the clamp margins (30) and the drop
-                below the dot (13) are sanctioned geometry for this
-                label. The halo matches the line's card-surface halo so
-                the text stays legible where it crosses bar fills. Static
-                geometry only: aria-hidden and pointer-events none, so
-                it never affects layout or interaction. */}
-            {peakHour >= 0 && overlayLabel && overlayUnit && (
-              <text
-                x={Math.min(Math.max(peakX, plotLeft + 30), plotRight - 30)}
-                y={peakY + 13}
-                textAnchor="middle"
-                fontSize="9"
-                className="fill-muted-foreground"
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="mt-4 w-full"
+          role="img"
+          aria-label={summary}
+          data-tip-root
+          data-units={W}
+          data-x0={plotLeft}
+          data-x1={plotRight}
+          data-tip-series={overlay ? "0,1" : "0"}
+          data-tip-qualifier={qualifier}
+        >
+          {/* skipTop drops the chart's top border (the topmost gridline);
+              the chapter charts read cleaner without it, and the topmost
+              tick label still renders. Every other YAxis consumer keeps
+              the default and renders byte-identical output. */}
+          <YAxis axis={axis} plotLeft={plotLeft} plotRight={plotRight} plotTop={plotTop} plotBottom={plotBottom} unit={seriesUnit} skipTop />
+          {series.map((v, h) => {
+            const valid = typeof v === "number" && Number.isFinite(v);
+            const height = valid ? (v / axis.hi) * plotH : 0;
+            return (
+              <rect
+                key={h}
+                tabIndex={0}
+                className={`chart-tooltip-trigger ${barClass}`}
+                data-tip={h}
+                data-tip-visual
+                data-cx={plotLeft + h * bw + bw / 2}
+                x={plotLeft + h * bw + 1}
+                y={plotBottom - height}
+                width={Math.max(1, bw - 2)}
+                height={Math.max(0, height)}
+                aria-label={`${hh(h)}, ${seriesLabel} ${valid ? `${formatNumber(v, 0)} ${seriesUnit}` : "no data"}`}
+              />
+            );
+          })}
+          {overlay && (
+            <>
+              {/* Halo first: the same path painted in the card surface color
+                  before the line draws, so the overlay separates from every
+                  bar fill it crosses in both themes. strokeWidth 5 and the
+                  dot radii are sanctioned geometry constants; the halo is
+                  static geometry (pointer-events none, aria-hidden), so it
+                  cannot affect layout or interaction. */}
+              <polyline
+                fill="none"
                 stroke="var(--card)"
-                strokeWidth={3}
-                paintOrder="stroke"
+                strokeWidth={5}
+                strokeLinecap="round"
+                points={overlayPts}
                 aria-hidden="true"
                 pointerEvents="none"
-              >
-                {overlayLabel} ({overlayUnit}, own scale)
-              </text>
-            )}
-          </>
-        )}
-        {/* wide invisible hit strips, one per hour, full chart height:
-            cursor snapping and touch taps land on these */}
-        {HOURS.map((h) => (
-          <rect
-            key={`hit-${h}`}
-            className="chart-hit"
-            data-tip={h}
-            data-cx={plotLeft + h * bw + bw / 2}
-            x={plotLeft + h * bw}
-            y={0}
-            width={bw}
-            height={H}
+              />
+              {peakHour >= 0 && (
+                <circle cx={peakX} cy={peakY} r={5} fill="var(--card)" aria-hidden="true" pointerEvents="none" />
+              )}
+              <polyline
+                fill="none"
+                stroke="var(--gg-chart-overlay)"
+                strokeWidth="2"
+                points={overlayPts}
+                aria-label={overlayLabel ?? ""}
+              />
+              {peakHour >= 0 && (
+                <circle cx={peakX} cy={peakY} r={2.5} fill="var(--gg-chart-overlay)" aria-hidden="true" pointerEvents="none" />
+              )}
+            </>
+          )}
+          {/* wide invisible hit strips, one per hour, full chart height:
+              cursor snapping and touch taps land on these */}
+          {HOURS.map((h) => (
+            <rect
+              key={`hit-${h}`}
+              className="chart-hit"
+              data-tip={h}
+              data-cx={plotLeft + h * bw + bw / 2}
+              x={plotLeft + h * bw}
+              y={0}
+              width={bw}
+              height={H}
+            />
+          ))}
+          {[0, 6, 12, 18, 23].map((h) => (
+            <text
+              key={h}
+              x={plotLeft + h * bw + bw / 2}
+              y={H - 2}
+              textAnchor="middle"
+              className="fill-muted-foreground"
+              fontSize="9"
+            >
+              {hh(h)}
+            </text>
+          ))}
+        </svg>
+      </ChartTooltip>
+      {/* Static legend row under the chart, replacing the peak-dot
+          micro-label: the pinned label was hard to read at 9px and could
+          run outside the plot, while a static row cannot overflow and
+          reads at the standard label size. No hover behavior, no state,
+          no layout change. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 gg-label text-muted-foreground">
+        <span className="inline-flex items-center gap-2">
+          {/* The theme mapping in app/globals.css generates the color
+              utilities in pairs, so fill-gg-bar-wind and bg-gg-bar-wind
+              resolve to one token. The other bar series pair the same
+              way: fill-gg-bar-gas with bg-gg-bar-gas for gas and
+              fill-gg-bar-renewables with bg-gg-bar-renewables for
+              renewables and fill-gg-bar-load with bg-gg-bar-load for
+              load. */}
+          <span
+            aria-hidden="true"
+            className={`inline-block h-2 w-3 rounded-[2px] ${barClass.replace(/^fill-/, "bg-")}`}
           />
-        ))}
-        {[0, 6, 12, 18, 23].map((h) => (
-          <text
-            key={h}
-            x={plotLeft + h * bw + bw / 2}
-            y={H - 2}
-            textAnchor="middle"
-            className="fill-muted-foreground"
-            fontSize="9"
-          >
-            {hh(h)}
-          </text>
-        ))}
-      </svg>
-    </ChartTooltip>
+          {seriesLabel} ({seriesUnit})
+        </span>
+        {overlay && overlayLabel && overlayUnit && (
+          <span className="inline-flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="inline-block h-[2px] w-4"
+              style={{ background: "var(--gg-chart-overlay)" }}
+            />
+            {overlayLabel} ({overlayUnit}, own scale)
+          </span>
+        )}
+      </div>
+    </>
   );
 }
 
