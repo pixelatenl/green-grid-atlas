@@ -584,6 +584,16 @@ svg .chart-tooltip-trigger:hover {
   color: #fff;
 }
 
+/* gg-headline: in-card derived sentence at reading size. Product-owner
+   decision in the chapters piece: chapter headline sentences step down
+   from gg-statement to regular text size, bold. Used only by the
+   chapter headline sentences; the window cards' statements stay
+   gg-statement. */
+.gg-headline {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
 /*
   Lede, level 4: the description paragraph under each section heading
   (the CardDescription slot in FamilySection). text-base stepping up

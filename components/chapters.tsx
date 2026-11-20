@@ -144,7 +144,11 @@ function DayProfile({
         data-tip-series={overlay ? "0,1" : "0"}
         data-tip-qualifier={qualifier}
       >
-        <YAxis axis={axis} plotLeft={plotLeft} plotRight={plotRight} plotTop={plotTop} plotBottom={plotBottom} unit={seriesUnit} />
+        {/* skipTop drops the chart's top border (the topmost gridline);
+            the chapter charts read cleaner without it, and the topmost
+            tick label still renders. Every other YAxis consumer keeps
+            the default and renders byte-identical output. */}
+        <YAxis axis={axis} plotLeft={plotLeft} plotRight={plotRight} plotTop={plotTop} plotBottom={plotBottom} unit={seriesUnit} skipTop />
         {series.map((v, h) => {
           const valid = typeof v === "number" && Number.isFinite(v);
           const height = valid ? (v / axis.hi) * plotH : 0;
@@ -194,6 +198,32 @@ function DayProfile({
             {peakHour >= 0 && (
               <circle cx={peakX} cy={peakY} r={2.5} fill="var(--gg-chart-overlay)" aria-hidden="true" pointerEvents="none" />
             )}
+            {/* Micro-label pinned at the peak dot, drawn after the dot:
+                the overlay line is normalized to its own maximum (its
+                peak defines the plot top), so without this label the
+                line is unreadable. The label names the line and states
+                its own-scale fact; the clamp margins (30) and the drop
+                below the dot (13) are sanctioned geometry for this
+                label. The halo matches the line's card-surface halo so
+                the text stays legible where it crosses bar fills. Static
+                geometry only: aria-hidden and pointer-events none, so
+                it never affects layout or interaction. */}
+            {peakHour >= 0 && overlayLabel && overlayUnit && (
+              <text
+                x={Math.min(Math.max(peakX, plotLeft + 30), plotRight - 30)}
+                y={peakY + 13}
+                textAnchor="middle"
+                fontSize="9"
+                className="fill-muted-foreground"
+                stroke="var(--card)"
+                strokeWidth={3}
+                paintOrder="stroke"
+                aria-hidden="true"
+                pointerEvents="none"
+              >
+                {overlayLabel} ({overlayUnit}, own scale)
+              </text>
+            )}
           </>
         )}
         {/* wide invisible hit strips, one per hour, full chart height:
@@ -242,8 +272,13 @@ function Chapter({
 }) {
   const narration = narrationFor(id);
   return (
-    <FamilySection title={title} description={description}>
-      <p className="gg-statement">{headline}</p>
+    /* Chapter titles are derived phrases (the valley title is the
+       longest), so every one uses the documented gg-heading-wide
+       override: the heading spans the full card content width like
+       the green window and red hours titles, instead of wrapping at
+       the .gg-heading 18ch scale cap. */
+    <FamilySection title={title} description={description} headingClassName="gg-heading-wide">
+      <p className="gg-headline">{headline}</p>
       {children}
       {narration && <AiInsight text={narration} />}
     </FamilySection>

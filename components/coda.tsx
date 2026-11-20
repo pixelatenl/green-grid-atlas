@@ -2,8 +2,6 @@ import { snapshot, formatNumber } from "@/data/snapshot";
 import { narrationFor } from "@/data/narration";
 import { AiInsight } from "@/components/ai-insight";
 import { EMISSION_FACTORS, PRODUCTION_TYPES } from "@/grid/emission-factors";
-import { formatBand } from "@/grid/green-window";
-import { formatDate } from "@/format-date";
 
 /*
   Coda, "The extremes", in the family coda style: one composition. A
@@ -13,14 +11,14 @@ import { formatDate } from "@/format-date";
   headline carrying one brand-accent span, deck copy, the dirtiest and
   cleanest hour as two big-number figures with their mix bars, and the
   five-record stat row. Below the stage, on the normal background, the
-  closing greenest-hour paragraph and the AI insight block.
+  AI insight block.
 
   The photo is "white electic windmill" by Nicholas Doherty on Unsplash
   (Rampion Offshore Wind Farm, United Kingdom, Unsplash License),
   self-hosted at public/images/rampion-offshore-wind.jpg; no external URL
   is fetched at page load. Every figure renders from the snapshot at
-  build time (snapshot.records, snapshot.greenWindow, snapshot.trailing);
-  nothing is pasted. The stage stays fully server-rendered.
+  build time (snapshot.records); nothing is pasted. The stage stays
+  fully server-rendered.
 */
 
 const RECORD_NOTES: Record<string, string> = {
@@ -57,11 +55,7 @@ export function Coda() {
   const stats = ["highestPrice", "mostNegativePrice", "highestResidualLoad", "biggestImport", "dunkelflauteDay"]
     .map((k) => snapshot.records.find((r) => r.key === k))
     .filter((r): r is NonNullable<typeof r> => r != null);
-  const band = snapshot.greenWindow.green.modalBand;
   const narration = narrationFor("coda");
-  const windowText = `${snapshot.trailing.from ? formatDate(snapshot.trailing.from) : "n/a"} to ${
-    snapshot.trailing.to ? formatDate(snapshot.trailing.to) : "n/a"
-  }`;
 
   return (
     <section className="mb-12">
@@ -154,19 +148,7 @@ export function Coda() {
         </p>
       </div>
 
-      {/* below the photo, on the normal background: the closing paragraph
-          and the AI insight block, unchanged in content */}
-      <p className="mt-6 max-w-[62ch] text-lg font-medium leading-snug">
-        So, when is the greenest hour on the Dutch grid?{" "}
-        {band ? (
-          <>
-            Usually <strong>{formatBand(band)}</strong>: cheap and renewable at once. The atlas above has every
-            hour of the trailing window, {windowText}, to back that up.
-          </>
-        ) : (
-          <>The atlas above has every hour of the trailing window, {windowText}; the pattern is yours to read.</>
-        )}
-      </p>
+      {/* below the photo, on the normal background: the AI insight block */}
       {narration && <AiInsight text={narration} />}
     </section>
   );
