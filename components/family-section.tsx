@@ -12,7 +12,7 @@ import {
  */
 export function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-primary sm:text-3xl dark:text-white">
+    <h2 className="gg-heading">
       {children}
     </h2>
   );
@@ -46,7 +46,7 @@ export function FamilySection({
       <Card>
         <CardHeader>
           <SectionHeading>{title}</SectionHeading>
-          {description && <CardDescription>{description}</CardDescription>}
+          {description && <CardDescription className="gg-lede mt-1">{description}</CardDescription>}
         </CardHeader>
         <CardContent className={contentClassName}>{children}</CardContent>
       </Card>

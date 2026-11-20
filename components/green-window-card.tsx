@@ -41,7 +41,7 @@ export function GreenWindowCard() {
       }
       description={`The recurring hours when Dutch power is both cheap and clean, computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days, every figure below straight from the snapshot.`}
     >
-      <p className="text-3xl font-black leading-[1.05] tracking-tight sm:text-5xl">
+      <p className="gg-statement">
         {band ? (
           <>
             Most days, the greenest hours are{" "}
@@ -54,7 +54,7 @@ export function GreenWindowCard() {
           <>No recurring green band in the last {gw.green.days} days.</>
         )}
       </p>
-      <p className="mt-3 max-w-[62ch] text-sm text-muted-foreground">
+      <p className="mt-3 max-w-[62ch] gg-caption">
         Green means day-ahead price at or below the{" "}
         {formatNumber(gw.percentiles.priceP30, 1)} EUR/MWh mark (p{WINDOW_PARAMS.GREEN_PRICE_PERCENTILE} of the trailing {WINDOW_PARAMS.TRAILING_DAYS} days){" "}
         <span aria-hidden="true">AND</span> renewable share of generation at or above{" "}
@@ -92,7 +92,7 @@ export function GreenWindowCard() {
               );
             })}
           </div>
-          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+          <div className="mt-1 flex justify-between gg-label text-muted-foreground">
             <span>00:00</span>
             <span>06:00</span>
             <span>12:00</span>
@@ -101,7 +101,7 @@ export function GreenWindowCard() {
           </div>
         </div>
       </ChartTooltip>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 gg-caption">
         All times Europe/Amsterdam. The band shown is the modal recurring band of the trailing{" "}
         {gw.green.days} days ({nf.format(gw.green.days)} days, each hour an independent sample);
         single qualifying hours do not form the window.

@@ -35,7 +35,7 @@ export function FamilyHero({
       <p className="mb-3 text-sm font-medium tracking-wide text-primary uppercase">
         {kicker}
       </p>
-      <h1 className="max-w-[11em] text-[clamp(2.4rem,1.69rem+2.93vw,4.5rem)] font-black leading-[1.05] tracking-[-0.03em]">
+      <h1 className="gg-display">
         {title}
       </h1>
       {deck && (
