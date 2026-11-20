@@ -1,6 +1,6 @@
 import { snapshot, formatNumber } from "@/data/snapshot";
 import { narrationFor } from "@/data/narration";
-import { formatBand, WINDOW_PARAMS } from "@/grid/green-window";
+import { formatBand, WINDOW_PARAMS, otherRecurringWindow, otherWindowSentence } from "@/grid/green-window";
 import {
   HOUR_LABELS,
   SEASONAL_HOLDS_UP_PCT,
@@ -39,9 +39,19 @@ import { ChartTooltip } from "@/components/chart-tooltip";
     (2.91:1 light, 2.35:1 dark between the two reds);
   - zero-count hours: a fixed 2 px stub in the track token
     var(--chart-track), never a hidden or zero-height lie.
-  Under the bars a bracket spans exactly the modal band hours, placed
-  with percentage math from startHour/endHour, with up-ticks at both
-  ends and a centered micro label. The 24 cells sit on the shared
+  Under the bars a bracket row spans exactly the modal band hours, the
+  winner bracket placed with percentage math from startHour/endHour,
+  with up-ticks at both ends and a centered micro label ("recurring
+  window", bare form per the product owner). When the rule's other
+  recurring window exists (otherRecurringWindow in
+  src/grid/green-window.ts: the strongest interval separated from the
+  winner by at least one hour that qualifies on at least half as many
+  days), a second, fainter bracket is drawn in the same row with the
+  same percentage geometry: the red band token at 45 percent, smaller
+  up-ticks, and NO visible label, because narrow windows and label
+  collisions on phones would otherwise overlap the winner's label;
+  the caption sentence and the strip's aria-label carry it instead.
+  The 24 cells sit on the shared
   ChartTooltip island (series mode, data-units 24): each cell is
   focusable with an honest aria-label, carries a wide hit target (the
   full-height cell itself) and shows the server-computed per-hour count
@@ -105,6 +115,9 @@ export function RedHoursCard() {
       if (h >= 0 && h < 24) counts[h] += 1;
     }
   }
+  /* The second recurring window, derived from the same qualifyingHours
+     by the shared rule (never hardcoded); null when there is none. */
+  const other = otherRecurringWindow(gw.red, days);
   const inBand = (h: number) => band != null && h >= band.startHour && h <= band.endHour;
   const pctOf = (h: number) => (days > 0 ? formatNumber((counts[h] / days) * 100, 0) : "0");
 
@@ -122,7 +135,9 @@ export function RedHoursCard() {
     } the red hours.`;
   const stripAria = `Per-hour frequency strip over the trailing ${days} days: how many days each hour met the red rule. The red hours ${
     band ? formatBand(band) : "are empty"
-  }, opening on ${formatNumber(sharePct, 0)}% of the trailing ${days} days. Vertical scale: the percentage of the trailing ${days} days on which each hour met the red rule.`;
+  }, opening on ${formatNumber(sharePct, 0)}% of the trailing ${days} days. Vertical scale: the percentage of the trailing ${days} days on which each hour met the red rule.${
+    other ? ` ${otherWindowSentence(other, days)}` : ""
+  }`;
 
   /* Bracket math: the range line spans exactly the modal band hours as
      a percentage of the 24 hour columns. */
@@ -266,9 +281,9 @@ export function RedHoursCard() {
                 </div>
               </div>
 
-              {/* bracket marking the recurring window: a thin range line
-                  over exactly the modal band hours, up-ticks at both ends,
-                  centered micro label; only drawn when a band exists */}
+              {/* bracket row: the winner bracket over exactly the modal
+                  band hours, plus at most one fainter bracket for the
+                  other recurring window; only drawn when a band exists */}
               {band && (
                 <div aria-hidden="true" className="relative mt-1 h-7">
                   <div
@@ -284,11 +299,34 @@ export function RedHoursCard() {
                       style={{ background: "var(--gg-red-band)" }}
                     />
                   </div>
+                  {/* the other recurring window: same percentage geometry
+                      from startHour/endHour, muted to 45 percent of the
+                      red band token, smaller up-ticks, and no visible
+                      label; the caption and the aria-label carry it */}
+                  {other && (
+                    <div
+                      className="absolute top-[6px] h-[2px]"
+                      style={{
+                        left: `${(other.startHour / 24) * 100}%`,
+                        width: `${((other.endHour - other.startHour + 1) / 24) * 100}%`,
+                        background: "color-mix(in oklab, var(--gg-red-band) 45%, transparent)",
+                      }}
+                    >
+                      <span
+                        className="absolute left-0 top-[-6px] h-[5px] w-[1.5px]"
+                        style={{ background: "color-mix(in oklab, var(--gg-red-band) 45%, transparent)" }}
+                      />
+                      <span
+                        className="absolute right-0 top-[-6px] h-[5px] w-[1.5px]"
+                        style={{ background: "color-mix(in oklab, var(--gg-red-band) 45%, transparent)" }}
+                      />
+                    </div>
+                  )}
                   <span
                     className="gg-label absolute top-[10px] whitespace-nowrap text-muted-foreground"
                     style={{ left: labelLeft, transform: "translateX(-50%)" }}
                   >
-                    the recurring window
+                    recurring window
                   </span>
                 </div>
               )}
@@ -311,7 +349,7 @@ export function RedHoursCard() {
         window costs less and avoids the grid's most fossil-heavy hours. {seasonalLine} Each bar counts how many
         of the trailing {days} days that hour met the red rule, counting any qualifying day, lone hours included.{" "}
         {band
-          ? `The bracket marks the recurring window: the hours that recur as a group most often, opening on ${formatNumber(sharePct, 0)}% of days. `
+          ? `The bracket marks the recurring window: the hours that recur as a group most often, opening on ${formatNumber(sharePct, 0)}% of days. ${other ? `${otherWindowSentence(other, days)} ` : ""}`
           : ""}
         Snapshot-fresh as of {snapshot.retrievedAt.slice(0, 10)}. All times Europe/Amsterdam.
       </p>
