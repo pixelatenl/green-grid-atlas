@@ -32,9 +32,12 @@ import { ChartTooltip } from "@/components/chart-tooltip";
     the solid band green).
   Under the bars a bracket spans exactly the modal band hours, placed
   with percentage math from startHour/endHour, with up-ticks at both
-  ends and a centered micro label; one muted gridline at half the plot
-  height carries the "green on half the days" scale label. The exact
-  counts live in the tooltips, not on an axis.
+  ends and a centered micro label. The plot carries a real vertical
+  scale: a left gutter percent axis beside the plot, muted gridlines at
+  quarter, half and three-quarter plot height, and the "green on half
+  the days" label pinned on the half-height line; the plot's own
+  borders are the 0 and 100 percent marks. The exact counts live in
+  the tooltips, not on an axis.
 
   The 24 cells migrated onto the shared ChartTooltip island (series
   mode, data-units 24): each cell is focusable with an honest
@@ -54,10 +57,15 @@ import { ChartTooltip } from "@/components/chart-tooltip";
 const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
 const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => hourLabel(h));
 
-/* Sanctioned strip geometry: the 112 px plot row sits inside the allowed
-   96 to 120 px band; the zero-count stub is a fixed 2 px. */
-const PLOT_CLASS = "h-28";
+/* Sanctioned strip geometry: the plot row is the sanctioned 240 px
+   height (h-60); the zero-count stub stays a fixed 2 px. Bar heights
+   are percentages of the plot row, so they scale with it unchanged. */
+const PLOT_CLASS = "h-60";
 const ZERO_STUB_H = "2px";
+/* Sanctioned scale geometry, not statistics: the percent marks on the
+   left gutter axis. The plot's own bottom and top borders are the 0
+   and 100 percent marks; the inner marks carry the plot gridlines. */
+const SCALE_MARKS = [0, 25, 50, 75, 100] as const;
 /* The bracket label is centered on the bracket, clamped so it never
    leaves the strip on narrow screens (half its approx width is 92px). */
 const LABEL_CLAMP = 92;
@@ -175,7 +183,7 @@ export function GreenWindowCard() {
     } the recurring window.`;
   const stripAria = `Per-hour frequency strip over the trailing ${days} days: how many days each hour met the green rule. The recurring window ${
     band ? formatBand(band) : "is empty"
-  }, on ${formatNumber(sharePct, 0)}% of the trailing ${days} days.`;
+  }, on ${formatNumber(sharePct, 0)}% of the trailing ${days} days. Vertical scale: the percentage of the trailing ${days} days on which each hour met the green rule.`;
 
   /* Bracket math: the range line spans exactly the modal band hours as
      a percentage of the 24 hour columns. */
@@ -184,7 +192,8 @@ export function GreenWindowCard() {
   const bracketCenter = bracketLeft + bracketWidth / 2;
   const labelLeft = `clamp(${LABEL_CLAMP}px, ${bracketCenter}%, calc(100% - ${LABEL_CLAMP}px))`;
 
-  /* The three honest bar states; heights are a share of the plot row. */
+  /* The three honest bar states; heights are a share of the plot row,
+     widths a fixed 80 percent of the hour cell. */
   const barStyle = (h: number): React.CSSProperties => {
     if (counts[h] === 0 || days === 0) {
       return { height: ZERO_STUB_H, background: "var(--chart-track)" };
@@ -261,80 +270,103 @@ export function GreenWindowCard() {
       {/* per-hour frequency strip on the shared ChartTooltip island */}
       <ChartTooltip labels={HOUR_LABELS} notes={notes}>
         <div className="mt-6">
-          <div
-            className={`relative ${PLOT_CLASS} overflow-hidden rounded-lg border border-border bg-background`}
-            role="group"
-            aria-label={stripAria}
-            data-tip-root
-            data-units="24"
-            data-x0="0"
-            data-x1="24"
-            data-tip-qualifier={threshold}
-          >
-            {/* half-height scale gridline with its micro label */}
-            <div aria-hidden="true" className="absolute inset-x-0 top-1/2 border-t border-border" />
-            <span
-              aria-hidden="true"
-              className="gg-label absolute right-0 top-1/2 text-muted-foreground"
-              style={{ transform: "translateY(-150%)", background: "var(--background)", padding: "0 2px" }}
-            >
-              green on half the days
-            </span>
-            {/* 24 bars; each full-height cell is the wide hit target */}
-            <div className="flex h-full">
-              {Array.from({ length: 24 }, (_, h) => (
-                <div
-                  key={h}
-                  tabIndex={0}
-                  className="chart-tooltip-trigger relative h-full flex-1 border-r border-border/40 last:border-r-0"
-                  data-tip={h}
-                  data-tip-visual
-                  data-cx={h + 0.5}
-                  aria-label={ariaFor(h)}
+          <div className="flex">
+            {/* left gutter: the percent scale axis, aria-hidden; the same
+                scale is stated in the plot group's aria-label below */}
+            <div aria-hidden="true" className={`relative ${PLOT_CLASS} w-12 shrink-0 pr-2`}>
+              {SCALE_MARKS.map((mark) => (
+                <span
+                  key={mark}
+                  className="gg-label absolute right-0 text-muted-foreground"
+                  style={{ top: `${100 - mark}%`, transform: "translateY(-50%)" }}
                 >
-                  <div
-                    className="absolute bottom-0 left-1/2 w-[70%] -translate-x-1/2 rounded-t-[2px]"
-                    style={barStyle(h)}
-                  />
-                </div>
+                  {mark}%
+                </span>
               ))}
             </div>
-          </div>
-
-          {/* bracket marking the recurring window: a thin range line
-              over exactly the modal band hours, up-ticks at both ends,
-              centered micro label; only drawn when a band exists */}
-          {band && (
-            <div aria-hidden="true" className="relative mt-1 h-7">
+            {/* plot column: the plot and the bracket and tick rows below
+                stay aligned to the plot area, not the full card width */}
+            <div className="min-w-0 flex-1">
               <div
-                className="absolute top-[6px] h-[2px]"
-                style={{ left: `${bracketLeft}%`, width: `${bracketWidth}%`, background: "var(--gg-green-band)" }}
+                className={`relative ${PLOT_CLASS} overflow-hidden rounded-lg border border-border bg-background`}
+                role="group"
+                aria-label={stripAria}
+                data-tip-root
+                data-units="24"
+                data-x0="0"
+                data-x1="24"
+                data-tip-qualifier={threshold}
               >
+                {/* quarter and three-quarter scale gridlines, styled
+                    exactly like the half-height line below */}
+                <div aria-hidden="true" className="absolute inset-x-0 top-[25%] border-t border-border" />
+                <div aria-hidden="true" className="absolute inset-x-0 top-[75%] border-t border-border" />
+                {/* half-height scale gridline with its micro label */}
+                <div aria-hidden="true" className="absolute inset-x-0 top-1/2 border-t border-border" />
                 <span
-                  className="absolute left-0 top-[-6px] h-[8px] w-[2px]"
-                  style={{ background: "var(--gg-green-band)" }}
-                />
-                <span
-                  className="absolute right-0 top-[-6px] h-[8px] w-[2px]"
-                  style={{ background: "var(--gg-green-band)" }}
-                />
+                  aria-hidden="true"
+                  className="gg-label absolute right-0 top-1/2 text-muted-foreground"
+                  style={{ transform: "translateY(-150%)", background: "var(--background)", padding: "0 2px" }}
+                >
+                  green on half the days
+                </span>
+                {/* 24 bars; each full-height cell is the wide hit target */}
+                <div className="flex h-full">
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <div
+                      key={h}
+                      tabIndex={0}
+                      className="chart-tooltip-trigger relative h-full flex-1 border-r border-border/40 last:border-r-0"
+                      data-tip={h}
+                      data-tip-visual
+                      data-cx={h + 0.5}
+                      aria-label={ariaFor(h)}
+                    >
+                      <div
+                        className="absolute bottom-0 left-1/2 w-[80%] -translate-x-1/2 rounded-t-[2px]"
+                        style={barStyle(h)}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
-              <span
-                className="gg-label absolute top-[10px] whitespace-nowrap text-muted-foreground"
-                style={{ left: labelLeft, transform: "translateX(-50%)" }}
-              >
-                the recurring window
-              </span>
-            </div>
-          )}
 
-          {/* hour ticks below the strip, as before */}
-          <div className="mt-1 flex justify-between gg-label text-muted-foreground">
-            <span>00:00</span>
-            <span>06:00</span>
-            <span>12:00</span>
-            <span>18:00</span>
-            <span>23:00</span>
+              {/* bracket marking the recurring window: a thin range line
+                  over exactly the modal band hours, up-ticks at both ends,
+                  centered micro label; only drawn when a band exists */}
+              {band && (
+                <div aria-hidden="true" className="relative mt-1 h-7">
+                  <div
+                    className="absolute top-[6px] h-[2px]"
+                    style={{ left: `${bracketLeft}%`, width: `${bracketWidth}%`, background: "var(--gg-green-band)" }}
+                  >
+                    <span
+                      className="absolute left-0 top-[-6px] h-[8px] w-[2px]"
+                      style={{ background: "var(--gg-green-band)" }}
+                    />
+                    <span
+                      className="absolute right-0 top-[-6px] h-[8px] w-[2px]"
+                      style={{ background: "var(--gg-green-band)" }}
+                    />
+                  </div>
+                  <span
+                    className="gg-label absolute top-[10px] whitespace-nowrap text-muted-foreground"
+                    style={{ left: labelLeft, transform: "translateX(-50%)" }}
+                  >
+                    the recurring window
+                  </span>
+                </div>
+              )}
+
+              {/* hour ticks below the strip, as before */}
+              <div className="mt-1 flex justify-between gg-label text-muted-foreground">
+                <span>00:00</span>
+                <span>06:00</span>
+                <span>12:00</span>
+                <span>18:00</span>
+                <span>23:00</span>
+              </div>
+            </div>
           </div>
         </div>
       </ChartTooltip>
