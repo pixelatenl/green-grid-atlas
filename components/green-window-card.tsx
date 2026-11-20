@@ -46,9 +46,11 @@ import { ChartTooltip } from "@/components/chart-tooltip";
   winner by at least one hour that qualifies on at least half as many
   days), a second, fainter bracket is drawn in the same row with the
   same percentage geometry: the band token at 45 percent, smaller
-  up-ticks, and NO visible label, because narrow windows and label
-  collisions on phones would otherwise overlap the winner's label;
-  the caption sentence and the strip's aria-label carry it instead.
+  up-ticks that still reach down to the line's bottom edge so they
+  stay connected to it, and its own centered "recurring window"
+  micro label, clamped to the strip exactly like the winner's label;
+  the caption sentence and the strip's aria-label also carry the
+  opening share.
   The plot carries a real vertical
   scale: a left gutter percent axis beside the plot, muted gridlines at
   quarter, half and three-quarter plot height, and the "green on half
@@ -152,11 +154,16 @@ export function GreenWindowCard() {
   }`;
 
   /* Bracket math: the range line spans exactly the modal band hours as
-     a percentage of the 24 hour columns. */
+     a percentage of the 24 hour columns. The other window's bracket
+     uses the same percentage geometry and its own clamped label
+     position, mirroring the winner's label math. */
   const bracketLeft = band ? (band.startHour / 24) * 100 : 0;
   const bracketWidth = band ? ((band.endHour - band.startHour + 1) / 24) * 100 : 0;
   const bracketCenter = bracketLeft + bracketWidth / 2;
   const labelLeft = `clamp(${LABEL_CLAMP}px, ${bracketCenter}%, calc(100% - ${LABEL_CLAMP}px))`;
+  const otherLeft = other ? (other.startHour / 24) * 100 : 0;
+  const otherWidth = other ? ((other.endHour - other.startHour + 1) / 24) * 100 : 0;
+  const otherLabelLeft = `clamp(${LABEL_CLAMP}px, ${otherLeft + otherWidth / 2}%, calc(100% - ${LABEL_CLAMP}px))`;
 
   /* The three honest bar states; heights are a share of the plot row,
      widths a fixed 80 percent of the hour cell. */
@@ -317,23 +324,26 @@ export function GreenWindowCard() {
                   </div>
                   {/* the other recurring window: same percentage geometry
                       from startHour/endHour, muted to 45 percent of the
-                      band token, smaller up-ticks, and no visible label;
-                      the caption and the aria-label carry it */}
+                      band token, smaller up-ticks that still reach down
+                      to the line's bottom edge (top -3px with height
+                      5px over the 2px line, like the winner's ticks),
+                      and its own clamped "recurring window" label; the
+                      caption and the aria-label carry the share sentence */}
                   {other && (
                     <div
                       className="absolute top-[6px] h-[2px]"
                       style={{
-                        left: `${(other.startHour / 24) * 100}%`,
-                        width: `${((other.endHour - other.startHour + 1) / 24) * 100}%`,
+                        left: `${otherLeft}%`,
+                        width: `${otherWidth}%`,
                         background: "color-mix(in oklab, var(--gg-green-band) 45%, transparent)",
                       }}
                     >
                       <span
-                        className="absolute left-0 top-[-6px] h-[5px] w-[1.5px]"
+                        className="absolute left-0 top-[-3px] h-[5px] w-[1.5px]"
                         style={{ background: "color-mix(in oklab, var(--gg-green-band) 45%, transparent)" }}
                       />
                       <span
-                        className="absolute right-0 top-[-6px] h-[5px] w-[1.5px]"
+                        className="absolute right-0 top-[-3px] h-[5px] w-[1.5px]"
                         style={{ background: "color-mix(in oklab, var(--gg-green-band) 45%, transparent)" }}
                       />
                     </div>
@@ -344,6 +354,14 @@ export function GreenWindowCard() {
                   >
                     recurring window
                   </span>
+                  {other && (
+                    <span
+                      className="gg-label absolute top-[10px] whitespace-nowrap text-muted-foreground"
+                      style={{ left: otherLabelLeft, transform: "translateX(-50%)" }}
+                    >
+                      recurring window
+                    </span>
+                  )}
                 </div>
               )}
 
