@@ -33,8 +33,8 @@ import { ChartTooltip } from "@/components/chart-tooltip";
   Under the bars a bracket spans exactly the modal band hours, placed
   with percentage math from startHour/endHour, with up-ticks at both
   ends and a centered micro label; one muted gridline at half the plot
-  height carries the "half the days" scale label. The exact counts
-  live in the tooltips, not on an axis.
+  height carries the "green on half the days" scale label. The exact
+  counts live in the tooltips, not on an axis.
 
   The 24 cells migrated onto the shared ChartTooltip island (series
   mode, data-units 24): each cell is focusable with an honest
@@ -46,7 +46,7 @@ import { ChartTooltip } from "@/components/chart-tooltip";
   Type stays on the named scale from c1fb692 and nothing ad-hoc is
   introduced: the statement stays .gg-statement, the chip label words
   and the bracket/gridline/tick micro labels are .gg-label, the chip
-  p-lines, the basis line and the strip captions are .gg-caption.
+  p-lines and the strip captions are .gg-caption.
 */
 
 /* Zero-padded hour labels; the band's exclusive end (endHour + 1) can
@@ -93,6 +93,31 @@ function daypartFor(startHour: number): string {
 */
 const SEASONAL_HOLDS_UP_PCT = 50;
 
+/*
+  Sanctioned editorial mapping from the snapshot month to the season
+  phrase in the section title: a presentation constant, documented
+  here, never tuned per snapshot. Meteorological seasons, with the
+  phase by month position within the season (month 1 = January):
+  12 "in early winter", 1 "in mid winter", 2 "in late winter",
+  3 "in early spring", 4 "in mid spring", 5 "in late spring",
+  6 "in early summer", 7 "in mid summer", 8 "in late summer",
+  9 "in early fall", 10 "in mid fall", 11 "in late fall".
+*/
+const SEASON_PHRASE_BY_MONTH: Record<number, string> = {
+  12: "in early winter",
+  1: "in mid winter",
+  2: "in late winter",
+  3: "in early spring",
+  4: "in mid spring",
+  5: "in late spring",
+  6: "in early summer",
+  7: "in mid summer",
+  8: "in late summer",
+  9: "in early fall",
+  10: "in mid fall",
+  11: "in late fall",
+};
+
 export function GreenWindowCard() {
   const gw = snapshot.greenWindow;
   const band = gw.green.modalBand;
@@ -116,6 +141,11 @@ export function GreenWindowCard() {
     gw.green.frequencyShare * 100 < SEASONAL_HOLDS_UP_PCT
       ? `The window is thin this season: the full band opened on ${bandDays} of the last ${days} days.`
       : `The window holds up well: the full band opened on ${bandDays} of the last ${days} days.`;
+
+  /* The season phrase in the section title derives from the snapshot's
+     own freshness date (retrievedAt slice 0-10, the same source the
+     snapshot-fresh sentence uses); never hardcoded to a season. */
+  const seasonPhrase = SEASON_PHRASE_BY_MONTH[Number(snapshot.retrievedAt.slice(5, 7))];
   const priceP30 = gw.percentiles.priceP30;
   const renP70 = gw.percentiles.renP70;
   const threshold = `green rule: price at or below ${formatNumber(priceP30, 1)} EUR/MWh and renewable share at or above ${formatNumber(renP70, 1)}%`;
@@ -147,13 +177,6 @@ export function GreenWindowCard() {
     band ? formatBand(band) : "is empty"
   }, on ${formatNumber(sharePct, 0)}% of the trailing ${days} days.`;
 
-  /* The most reliable green hour: argmax over the counts, earliest hour
-     wins ties; omitted entirely when no hour qualified. */
-  let bestHour = -1;
-  counts.forEach((c, h) => {
-    if (c > 0 && (bestHour < 0 || c > counts[bestHour])) bestHour = h;
-  });
-
   /* Bracket math: the range line spans exactly the modal band hours as
      a percentage of the 24 hour columns. */
   const bracketLeft = band ? (band.startHour / 24) * 100 : 0;
@@ -175,7 +198,7 @@ export function GreenWindowCard() {
     <FamilySection
       title={
         <>
-          The <span className="text-brand-accent">green window</span>
+          The <span className="text-brand-accent">green window</span> {seasonPhrase}
         </>
       }
       description={`The recurring hours when Dutch power is both cheap and clean, computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days.`}
@@ -209,7 +232,7 @@ export function GreenWindowCard() {
             <span className="font-medium tabular-nums">{formatNumber(priceP30, 1)} EUR/MWh</span>
           </p>
           <p className="mt-1 gg-caption">
-            in the cheapest {WINDOW_PARAMS.GREEN_PRICE_PERCENTILE}% of hours over the trailing{" "}
+            cheaper than about {100 - WINDOW_PARAMS.GREEN_PRICE_PERCENTILE}% of hours in the trailing{" "}
             {WINDOW_PARAMS.TRAILING_DAYS} days
           </p>
         </li>
@@ -223,7 +246,7 @@ export function GreenWindowCard() {
             <span className="font-medium tabular-nums">{formatNumber(renP70, 1)}%</span>
           </p>
           <p className="mt-1 gg-caption">
-            in the cleanest {100 - WINDOW_PARAMS.GREEN_RENEWABLE_PERCENTILE}% of hours over the trailing{" "}
+            more renewable than about {WINDOW_PARAMS.GREEN_RENEWABLE_PERCENTILE}% of hours in the trailing{" "}
             {WINDOW_PARAMS.TRAILING_DAYS} days
           </p>
         </li>
@@ -249,7 +272,7 @@ export function GreenWindowCard() {
               className="gg-label absolute right-0 top-1/2 text-muted-foreground"
               style={{ transform: "translateY(-150%)", background: "var(--background)", padding: "0 2px" }}
             >
-              half the days
+              green on half the days
             </span>
             {/* 24 bars; each full-height cell is the wide hit target */}
             <div className="flex h-full">
@@ -310,7 +333,7 @@ export function GreenWindowCard() {
         </div>
       </ChartTooltip>
 
-      <p className="mt-2 max-w-[62ch] gg-caption">
+      <p className="mt-2 gg-caption">
         Why these hours: on a dynamic tariff, shifting flexible use such as charging or dishwashing into the
         window costs less and runs on the grid's most renewable-heavy hours. {seasonalLine} Each bar counts how
         many of the trailing {days} days that hour met the green rule, counting any qualifying day, lone hours
@@ -318,16 +341,8 @@ export function GreenWindowCard() {
         {band
           ? `The bracket marks the recurring window: the contiguous band shape most frequent in the trailing days, recurring on ${formatNumber(sharePct, 0)}% of days. `
           : ""}
-        Basis: renewable share of <strong>generation</strong> (NL generation mix); price is the NL day-ahead
-        price. Snapshot-fresh as of {snapshot.retrievedAt.slice(0, 10)}.{" "}
-        All times Europe/Amsterdam; each hour is an independent sample; single qualifying hours outside bands
-        never form the window.
+        Snapshot-fresh as of {snapshot.retrievedAt.slice(0, 10)}. All times Europe/Amsterdam.
       </p>
-      {bestHour >= 0 && (
-        <p className="mt-1 gg-caption">
-          The most reliable hour is {HOUR_LABELS[bestHour]}: green on {counts[bestHour]} of {days} days.
-        </p>
-      )}
       {narration && <AiInsight text={narration} />}
     </FamilySection>
   );
