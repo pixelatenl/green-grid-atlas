@@ -1,21 +1,35 @@
+import { Fragment } from "react";
 import { snapshot, formatNumber, formatSigned } from "@/data/snapshot";
-import { formatDate } from "@/format-date";
 import { FamilySection } from "@/components/family-section";
 import { ChartTooltip } from "@/components/chart-tooltip";
 import { YAxis, axisY, niceAxis } from "@/components/chart-axis";
 
 /*
-  Where power flows: a per-neighbor physical flow timeline (cbpf, GW, daily
-  means over the trailing 12 months) plus per-neighbor import and export
-  volumes in TWh per year. Sign convention disclosed on the card: imports
-  positive, exports negative (energy-charts cbpf attributes).
+  Where power flows: one aggregate panel of trailing-twelve-month import
+  and export energy per neighbor (cbpf). Each hourly flow series is
+  summed per sign, positive hours as the import side and negative hours
+  as the export side, divided by 1000 for TWh; nulls and non-finite
+  hours are skipped. Imports draw up in teal and exports down in orange
+  from one shared zero axis, the country names sit under the bar pairs
+  and the exact figures print at the bars. The sign convention disclosed
+  on the card is the source's: imports positive, exports negative
+  (energy-charts cbpf attributes).
 
-  Every chart gets a computed left y-axis (nice 1/2/5 steps from the
-  series, zero at the baseline, unit stated once per axis) and migrates
-  onto the shared ChartTooltip island: wide invisible hit strips snap
-  the cursor/tap to the nearest day or year, the native <title> elements
+  The calendar-year import, export and net history per neighbor lives on
+  in the shared ChartTooltip island: each neighbor group is its own
+  data-tip-root scope carrying that neighbor's series triple and
+  full-height hit strips, one per tooltip label (the flowVolumes years
+  plus the trailing window entry), so hover and tap step through the
+  history inside the group. The bar pair stays focusable as
+  chart-tooltip-trigger at the trailing entry, wide invisible hit strips
+  snap the cursor/tap to the nearest label, the native <title> elements
   are gone (the custom tooltip plus a browser default would read as two
   tooltips), and the aria-labels stay as the screen-reader channel.
+
+  The panel gets a computed left y-axis (nice 1/2/5 steps over the
+  signed range of all ten bars, zero at the baseline, the unit stated
+  once per axis) and computed geometry: five equal neighbor groups
+  across the plot, each bar pair centered in its group.
 */
 
 const NEIGHBOR_LABELS: Record<string, string> = {
@@ -32,17 +46,14 @@ const NEIGHBOR_LABELS: Record<string, string> = {
 const W = 720;
 const AXIS_W = 36; // left gutter for the y-axis tick labels
 const UNIT_H = 12; // top strip for the unit label
+const PAD = 8;
+const FIG_H = 14; // strips above and below the plot for the printed figures
+const LABEL_H = 16; // bottom strip for the country labels
+const PLOT_H = 160; // plot band for the bars
+const BAR_W = 20;
+const BAR_GAP = 8;
 
-/** Daily means of a flow series over the trailing days. */
-function dailyMeans(series: (number | null)[][], dates: string[]): { date: string; value: number | null }[] {
-  return dates.map((date, i) => {
-    const vals = series[i]?.filter((v): v is number => v != null && Number.isFinite(v)) ?? [];
-    return {
-      date,
-      value: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null,
-    };
-  });
-}
+const H = PAD + UNIT_H + FIG_H + PLOT_H + FIG_H + PAD + LABEL_H;
 
 /** Round for the compact client payload: one decimal, null stays null. */
 const round1 = (v: number | null) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10) / 10);
@@ -50,238 +61,306 @@ const round1 = (v: number | null) => (v == null || !Number.isFinite(v) ? null : 
 /* ---- build-time computation (Node, from the embedded snapshot) ---- */
 
 const neighbors = Object.keys(NEIGHBOR_LABELS).filter((n) => n !== "sum");
-const volumeCharts = [...neighbors, "sum"];
-
 const days = snapshot.trailing.days;
-const dateLabels = days.map((d) => formatDate(d.date));
-const timelinePoints: Record<string, { date: string; value: number | null }[]> = {};
-for (const n of neighbors) {
-  timelinePoints[n] = dailyMeans(
-    days.map((d) => d.flows[n] ?? []),
-    days.map((d) => d.date),
-  );
+
+/** Trailing-window energy of one flow series: the sum of its positive
+    hourly values is the import side, minus the sum of its negative
+    hourly values the export side, divided by 1000 for TWh. Null and
+    non-finite hours are skipped; an empty series yields null, not NaN. */
+function trailingTWh(series: (number | null)[][]): { importTWh: number | null; exportTWh: number | null } {
+  let imp = 0;
+  let exp = 0;
+  let seen = false;
+  for (const day of series) {
+    for (const v of day ?? []) {
+      if (v == null || !Number.isFinite(v)) continue;
+      seen = true;
+      if (v > 0) imp += v;
+      else exp += -v;
+    }
+  }
+  if (!seen) return { importTWh: null, exportTWh: null };
+  return { importTWh: imp / 1000, exportTWh: exp / 1000 };
 }
-const timelineSeries = neighbors.map((n) => ({
-  name: `${NEIGHBOR_LABELS[n]} daily mean flow`,
-  unit: "GW",
-  decimals: 1,
-  values: timelinePoints[n].map((p) => round1(p.value)),
-}));
+
+interface TrailingVolume {
+  importTWh: number | null;
+  exportTWh: number | null;
+  netTWh: number | null;
+}
+
+const trailing: Record<string, TrailingVolume> = {};
+for (const n of [...neighbors, "sum"]) {
+  const t = trailingTWh(days.map((d) => d.flows[n] ?? []));
+  trailing[n] = {
+    importTWh: t.importTWh,
+    exportTWh: t.exportTWh,
+    netTWh: t.importTWh != null && t.exportTWh != null ? t.importTWh - t.exportTWh : null,
+  };
+}
 
 const years = snapshot.flowVolumes.years;
 const yearLabels = years.map((y) => String(y.year));
-const volumeSeries = volumeCharts.flatMap((n) => {
-  const label = NEIGHBOR_LABELS[n] ?? n;
+const trailingLabel = snapshot.trailing.to ? `12 months to ${snapshot.trailing.to}` : "Trailing 12 months";
+const tipLabels = [...yearLabels, trailingLabel];
+const trailingIndex = years.length;
+
+/* Tooltip payload: per neighbor an import, export and net series over the
+   calendar years, with the trailing-window figures appended as the value
+   at the extra trailing index. */
+const volumeSeries = neighbors.flatMap((n) => {
+  const label = NEIGHBOR_LABELS[n];
+  const t = trailing[n];
   return [
-    { name: `${label} import`, unit: "TWh", decimals: 1, values: years.map((y) => round1(y.neighbors[n]?.importTWh ?? null)) },
-    { name: `${label} export`, unit: "TWh", decimals: 1, values: years.map((y) => round1(y.neighbors[n]?.exportTWh ?? null)) },
-    { name: `${label} net`, unit: "TWh", decimals: 1, values: years.map((y) => round1(y.neighbors[n]?.netTWh ?? null)) },
+    {
+      name: `${label} import`,
+      unit: "TWh",
+      decimals: 1,
+      values: [...years.map((y) => round1(y.neighbors[n]?.importTWh ?? null)), round1(t.importTWh)],
+    },
+    {
+      name: `${label} export`,
+      unit: "TWh",
+      decimals: 1,
+      values: [...years.map((y) => round1(y.neighbors[n]?.exportTWh ?? null)), round1(t.exportTWh)],
+    },
+    {
+      name: `${label} net`,
+      unit: "TWh",
+      decimals: 1,
+      values: [...years.map((y) => round1(y.neighbors[n]?.netTWh ?? null)), round1(t.netTWh)],
+    },
   ];
 });
 
-function FlowTimeline({ neighbor, seriesIndex }: { neighbor: string; seriesIndex: number }) {
-  const points = timelinePoints[neighbor];
-  const vals = points.map((p) => p.value).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const max = vals.length ? Math.max(...vals) : 1;
-  const min = vals.length ? Math.min(...vals) : -1;
-  const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-  const H = 90;
-  const PAD = 6;
-  const plotLeft = AXIS_W;
-  const plotRight = W - PAD;
-  const plotTop = PAD + UNIT_H;
-  const plotBottom = H - PAD;
-  // Computed axis: zero at the baseline, nice 1/2/5 steps from the data.
-  const axis = niceAxis(min, max);
-  const y = axisY(axis, plotTop, plotBottom);
-  const zeroY = y(0);
-  const step = (plotRight - plotLeft) / Math.max(1, points.length - 1);
-  const stripW = Math.max(step, 12); // wide touch targets, at least one per day
-  const path = points
-    .map((p, i) => {
-      if (p.value == null) return null;
-      const x = plotLeft + i * step;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y(p.value).toFixed(1)}`;
-    })
-    .filter(Boolean)
-    .join(" ");
-  const label = NEIGHBOR_LABELS[neighbor] ?? neighbor;
+/** One neighbor group: a nested SVG scope that is its own data-tip-root
+    (the old seriesBase pattern), carrying the bar pair, the printed
+    figures, the country label and the full-height hit strips. Local
+    coordinates: the nested viewport maps 1:1 onto the panel. */
+function NeighborGroup({
+  neighbor,
+  seriesBase,
+  gx,
+  groupW,
+  y,
+  zeroY,
+}: {
+  neighbor: string;
+  seriesBase: number;
+  gx: number;
+  groupW: number;
+  y: (v: number) => number;
+  zeroY: number;
+}) {
+  const label = NEIGHBOR_LABELS[neighbor];
+  const t = trailing[neighbor];
+  const imp = t.importTWh;
+  const exp = t.exportTWh;
+  const pairW = 2 * BAR_W + BAR_GAP;
+  const importX = (groupW - pairW) / 2;
+  const exportX = importX + BAR_W + BAR_GAP;
+  const importCX = importX + BAR_W / 2;
+  const exportCX = exportX + BAR_W / 2;
+  const slice = groupW / tipLabels.length;
   return (
     <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full"
-      role="img"
-      aria-label={`${label}: daily mean physical flow over the trailing 12 months, GW, imports positive exports negative. Range ${formatNumber(min, 1)} to ${formatNumber(max, 1)} GW, mean ${formatNumber(mean, 1)} GW.`}
+      x={gx}
+      y={0}
+      width={groupW}
+      height={H}
+      viewBox={`0 0 ${groupW} ${H}`}
+      role="group"
+      aria-label={`${label}: import and export bars, trailing twelve months`}
       data-tip-root
-      data-units={W}
-      data-x0={plotLeft}
-      data-x1={plotRight}
-      data-tip-series={String(seriesIndex)}
+      data-units={groupW}
+      data-x0={0}
+      data-x1={groupW}
+      data-tip-series={`${seriesBase},${seriesBase + 1},${seriesBase + 2}`}
       data-tip-qualifier="imports positive, exports negative"
     >
-      <YAxis axis={axis} plotLeft={plotLeft} plotRight={plotRight} plotTop={plotTop} plotBottom={plotBottom} unit="GW" skipZero />
-      <line x1={plotLeft} x2={plotRight} y1={zeroY} y2={zeroY} stroke="var(--border)" strokeDasharray="3 3" />
-      <path
-        d={path}
-        fill="none"
-        stroke="var(--gg-flow-import)"
-        strokeWidth="1.5"
-        tabIndex={0}
-        aria-label={`${label} flow timeline, trailing 12 months, daily means in GW`}
-        data-tip-heading={`${label}: daily mean flow, trailing 12 months`}
-        data-tip-title="GW, imports positive, exports negative"
-        data-tip-value={`range ${formatNumber(min, 1)} to ${formatNumber(max, 1)} GW`}
-        data-tip-qualifier={`mean ${formatNumber(mean, 1)} GW`}
-      />
-      {/* wide invisible hit strips, one per day, full chart height */}
-      {points.map((p, i) => (
+      {imp != null && Number.isFinite(imp) && (
+        <Fragment>
+          <rect
+            className="chart-tooltip-trigger"
+            tabIndex={0}
+            data-tip={trailingIndex}
+            data-tip-visual
+            data-cx={importCX}
+            x={importX}
+            y={y(imp)}
+            width={BAR_W}
+            height={Math.max(0, zeroY - y(imp))}
+            fill="var(--gg-flow-import)"
+            aria-label={`${label} import, trailing twelve months: ${formatNumber(imp, 1)} TWh (imports positive, exports negative)`}
+          />
+          <text x={importCX} y={y(imp) - 4} textAnchor="middle" className="gg-label fill-muted-foreground tabular-nums">
+            {formatNumber(imp, 1)}
+          </text>
+        </Fragment>
+      )}
+      {exp != null && Number.isFinite(exp) && (
+        <Fragment>
+          <rect
+            className="chart-tooltip-trigger"
+            tabIndex={0}
+            data-tip={trailingIndex}
+            data-tip-visual
+            data-cx={exportCX}
+            x={exportX}
+            y={zeroY}
+            width={BAR_W}
+            height={Math.max(0, y(-exp) - zeroY)}
+            fill="var(--gg-flow-export)"
+            aria-label={`${label} export, trailing twelve months: ${formatNumber(exp, 1)} TWh (imports positive, exports negative)`}
+          />
+          <text x={exportCX} y={y(-exp) + 12} textAnchor="middle" className="gg-label fill-muted-foreground tabular-nums">
+            {formatNumber(exp, 1)}
+          </text>
+        </Fragment>
+      )}
+      <text x={groupW / 2} y={H - 5} textAnchor="middle" className="gg-label fill-muted-foreground">
+        {label}
+      </text>
+      {/* full-height hit strips, one per tooltip label, tiling the group */}
+      {tipLabels.map((_, k) => (
         <rect
-          key={p.date}
+          key={k}
           className="chart-hit"
-          data-tip={i}
-          data-cx={plotLeft + i * step}
-          x={plotLeft + i * step - stripW / 2}
+          data-tip={k}
+          data-cx={(k + 0.5) * slice}
+          x={k * slice}
           y={0}
-          width={stripW}
+          width={slice}
           height={H}
         />
       ))}
-      <text x={plotLeft} y={12} className="fill-muted-foreground" fontSize="9">
-        {label}: daily mean ({formatNumber(min, 0)} … {formatNumber(max, 0)})
-      </text>
     </svg>
   );
 }
 
-function VolumeBars({ neighbor, seriesBase }: { neighbor: string; seriesBase: number }) {
-  const label = NEIGHBOR_LABELS[neighbor] ?? neighbor;
-  const nets = years.map((y) => y.neighbors[neighbor]?.netTWh ?? null);
-  const vals = nets.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const H = 110;
-  const PAD = 8;
-  const LABEL_H = 14; // bottom strip for the year labels
+/** The one aggregate panel: five neighbor groups on a shared signed
+    axis, zero line across the plot, unit TWh on the axis. */
+function FlowPanel() {
   const plotLeft = AXIS_W;
   const plotRight = W - PAD;
-  const plotTop = PAD + UNIT_H;
-  const plotBottom = H - PAD - LABEL_H;
-  // Computed signed axis over the net values, zero at the baseline.
-  const min = vals.length ? Math.min(...vals, 0) : 0;
-  const max = vals.length ? Math.max(...vals, 0) : 0;
-  const axis = niceAxis(min, max);
+  const plotTop = PAD + UNIT_H + FIG_H;
+  const plotBottom = plotTop + PLOT_H;
+
+  // Computed signed axis over all ten bars, zero always in the domain.
+  const signed: number[] = [];
+  for (const n of neighbors) {
+    const t = trailing[n];
+    if (t.importTWh != null && Number.isFinite(t.importTWh)) signed.push(t.importTWh);
+    if (t.exportTWh != null && Number.isFinite(t.exportTWh)) signed.push(-t.exportTWh);
+  }
+  const axis = niceAxis(signed.length ? Math.min(...signed) : 0, signed.length ? Math.max(...signed) : 0);
   const y = axisY(axis, plotTop, plotBottom);
   const zeroY = y(0);
-  const bw = (plotRight - plotLeft) / years.length;
+
+  const groupW = (plotRight - plotLeft) / neighbors.length;
+
+  const panelAria = `Import and export per neighbor, trailing twelve months${snapshot.trailing.to ? ` to ${snapshot.trailing.to}` : ""}: ${neighbors
+    .map((n) => {
+      const t = trailing[n];
+      return `${NEIGHBOR_LABELS[n]} imported ${formatNumber(t.importTWh, 1)} TWh and exported ${formatNumber(t.exportTWh, 1)} TWh`;
+    })
+    .join("; ")}. Imports positive, exports negative.`;
+
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full"
-      role="img"
-      aria-label={`${label}: net physical flow per year in TWh, imports positive, exports negative.`}
-      data-tip-root
-      data-units={W}
-      data-x0={plotLeft}
-      data-x1={plotRight}
-      data-tip-series={`${seriesBase},${seriesBase + 1},${seriesBase + 2}`}
-      data-tip-qualifier="imports positive, exports negative"
-    >
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={panelAria}>
       <YAxis axis={axis} plotLeft={plotLeft} plotRight={plotRight} plotTop={plotTop} plotBottom={plotBottom} unit="TWh" skipZero />
       <line x1={plotLeft} x2={plotRight} y1={zeroY} y2={zeroY} stroke="var(--border)" />
-      {years.map((yr, i) => {
-        const v = yr.neighbors[neighbor]?.netTWh ?? null;
-        if (typeof v !== "number" || !Number.isFinite(v)) return null;
-        const h = axis.hi > 0 ? (Math.abs(v) / (v >= 0 ? axis.hi : Math.abs(axis.lo))) * (v >= 0 ? zeroY - plotTop : plotBottom - zeroY) : 0;
-        const x = plotLeft + i * bw + 2;
-        return (
-          <rect
-            key={yr.year}
-            tabIndex={0}
-            className="chart-tooltip-trigger"
-            data-tip={i}
-            data-tip-visual
-            data-cx={plotLeft + i * bw + bw / 2}
-            x={x}
-            y={v >= 0 ? zeroY - h : zeroY}
-            width={Math.max(2, bw - 4)}
-            height={Math.max(1, h)}
-            fill={v >= 0 ? "var(--gg-flow-import)" : "var(--gg-flow-export)"}
-            aria-label={`${label} ${yr.year}: net ${formatSigned(v, 1)} TWh (imports positive, exports negative)`}
-          />
-        );
-      })}
-      {/* wide invisible hit strips, one per year, full chart height */}
-      {years.map((yr, i) => (
-        <rect
-          key={`hit-${yr.year}`}
-          className="chart-hit"
-          data-tip={i}
-          data-cx={plotLeft + i * bw + bw / 2}
-          x={plotLeft + i * bw}
-          y={0}
-          width={bw}
-          height={H}
+      {neighbors.map((n, g) => (
+        <NeighborGroup
+          key={n}
+          neighbor={n}
+          seriesBase={g * 3}
+          gx={plotLeft + g * groupW}
+          groupW={groupW}
+          y={y}
+          zeroY={zeroY}
         />
-      ))}
-      {years.map((yr, i) => (
-        <text
-          key={yr.year}
-          x={plotLeft + i * bw + bw / 2}
-          y={H - 2}
-          textAnchor="middle"
-          className="fill-muted-foreground"
-          fontSize="9"
-        >
-          {String(yr.year).slice(2)}
-        </text>
       ))}
     </svg>
   );
 }
 
 export function Flows() {
-  const lastYear = years[years.length - 1];
-  const total = lastYear?.neighbors.sum;
+  const total = trailing.sum;
+  const importTotal = total.importTWh;
+  const exportTotal = total.exportTWh;
+  const netTotal = total.netTWh;
+
+  // Derived extremes over the five neighbors; a rule that cannot pick a
+  // unique winner (no data, or a tie) omits its sentence gracefully.
+  const cand: { n: string; imp: number; exp: number }[] = [];
+  for (const n of neighbors) {
+    const t = trailing[n];
+    if (t.importTWh != null && t.exportTWh != null && Number.isFinite(t.importTWh) && Number.isFinite(t.exportTWh)) {
+      cand.push({ n, imp: t.importTWh, exp: t.exportTWh });
+    }
+  }
+  const traffics = cand.map((c) => ({ ...c, traffic: c.imp + c.exp }));
+  const maxTraffic = traffics.length ? Math.max(...traffics.map((c) => c.traffic)) : null;
+  const busiestList = traffics.filter((c) => c.traffic === maxTraffic);
+  const busiest = busiestList.length === 1 ? busiestList[0] : null;
+  const maxExport = cand.length ? Math.max(...cand.map((c) => c.exp)) : null;
+  const topList = cand.filter((c) => c.exp === maxExport);
+  const topExport = topList.length === 1 ? topList[0] : null;
+
+  const parts: React.ReactNode[] = [];
+  if (importTotal != null && exportTotal != null && netTotal != null) {
+    parts.push(
+      <Fragment key="national">
+        Over the twelve months{snapshot.trailing.to ? ` to ${snapshot.trailing.to}` : ""}, the Netherlands imported{" "}
+        <span className="tabular-nums">{formatNumber(importTotal, 1)} TWh</span> and exported{" "}
+        <span className="tabular-nums">{formatNumber(exportTotal, 1)} TWh</span> across all neighbors, a net{" "}
+        {netTotal < 0 ? "export" : "import"} of <span className="tabular-nums">{formatSigned(netTotal, 1)} TWh</span>.
+      </Fragment>,
+    );
+  }
+  if (busiest) {
+    parts.push(
+      <Fragment key="busiest">
+        The busiest two-way border is {NEIGHBOR_LABELS[busiest.n]}:{" "}
+        <span className="tabular-nums">{formatNumber(busiest.imp, 1)} TWh</span> in,{" "}
+        <span className="tabular-nums">{formatNumber(busiest.exp, 1)} TWh</span> out.
+      </Fragment>,
+    );
+  }
+  if (topExport) {
+    parts.push(
+      <Fragment key="top">
+        {NEIGHBOR_LABELS[topExport.n]} takes the most: <span className="tabular-nums">{formatNumber(topExport.exp, 1)} TWh</span> out.
+      </Fragment>,
+    );
+  }
+  parts.push(
+    <Fragment key="caveat">
+      Flows are physical: power can transit the Dutch grid on its way elsewhere, so these figures describe where electricity crosses
+      the border, not who traded it.
+    </Fragment>,
+  );
 
   return (
     <FamilySection
       title="Where power flows"
-      description="Cross-border physical flows (cbpf) between the Netherlands and its neighbors, in GW. Imports are positive, exports negative; that sign convention is the source's and is disclosed here."
+      description="Cross-border physical flows (cbpf) between the Netherlands and its neighbors. Imports count up in teal, exports down in orange; the source's sign convention (imports positive, exports negative) is disclosed here."
     >
-      <ChartTooltip labels={dateLabels} series={timelineSeries}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {neighbors.map((n, k) => (
-            <div key={n} className="rounded-lg border border-border p-2">
-              <FlowTimeline neighbor={n} seriesIndex={k} />
-            </div>
-          ))}
+      <h3 className="text-lg font-bold tracking-tight">Import and export per neighbor</h3>
+      <ChartTooltip labels={tipLabels} series={volumeSeries}>
+        <div className="mt-2 rounded-lg border border-border p-2">
+          <FlowPanel />
         </div>
       </ChartTooltip>
       <p className="mt-4 gg-caption">
-        Daily mean physical flows, trailing 12 months ({snapshot.trailing.from} – {snapshot.trailing.to}).
+        {parts.map((part, i) => (
+          <Fragment key={i}>
+            {i > 0 ? " " : ""}
+            {part}
+          </Fragment>
+        ))}
       </p>
-
-      <h3 className="mt-6 text-lg font-bold tracking-tight">Net flow per neighbor, TWh per year</h3>
-      <p className="mt-1 gg-caption">
-        Imports positive (teal), exports negative (orange).{" "}
-        {lastYear && total ? (
-          <>
-            In {lastYear.year} the national net balance was{" "}
-            <span className="tabular-nums">{formatSigned(total.netTWh, 1)} TWh</span> (import{" "}
-            {formatNumber(total.importTWh, 1)} TWh, export {formatNumber(total.exportTWh, 1)} TWh across all
-            neighbors).
-          </>
-        ) : (
-          "National net balance per year below."
-        )}
-      </p>
-      <ChartTooltip labels={yearLabels} series={volumeSeries}>
-        <div className="mt-2 grid gap-4 sm:grid-cols-2">
-          {volumeCharts.map((n, k) => (
-            <div key={n} className="rounded-lg border border-border p-2">
-              <VolumeBars neighbor={n} seriesBase={k * 3} />
-            </div>
-          ))}
-        </div>
-      </ChartTooltip>
     </FamilySection>
   );
 }
