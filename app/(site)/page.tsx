@@ -1,8 +1,8 @@
 import { FamilyHero } from "@/components/family-hero";
 import { GreenWindowCard } from "@/components/green-window-card";
+import { RedHoursCard } from "@/components/red-hours-card";
 import { AtlasRhythm } from "@/components/atlas-rhythm";
 import { Chapters } from "@/components/chapters";
-import { RedHoursCard } from "@/components/red-hours-card";
 import { Flows } from "@/components/flows";
 import { RiskIndicators } from "@/components/risk-indicators";
 import { EuropeScore } from "@/components/europe-score";
@@ -53,6 +53,7 @@ export default function Home() {
       </section>
 
       <GreenWindowCard />
+      <RedHoursCard />
 
       <FamilySection
         title="The year has a shape"
@@ -68,7 +69,6 @@ export default function Home() {
       </FamilySection>
 
       <Chapters />
-      <RedHoursCard />
       <Flows />
       <RiskIndicators />
       <EuropeScore />

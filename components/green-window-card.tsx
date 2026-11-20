@@ -1,6 +1,13 @@
 import { snapshot, formatNumber } from "@/data/snapshot";
 import { narrationFor } from "@/data/narration";
 import { formatBand, WINDOW_PARAMS } from "@/grid/green-window";
+import {
+  HOUR_LABELS,
+  SEASONAL_HOLDS_UP_PCT,
+  daypartFor,
+  hourLabel,
+  seasonPhraseForMonth,
+} from "@/grid/editorial";
 import { FamilySection } from "@/components/family-section";
 import { AiInsight } from "@/components/ai-insight";
 import { ChartTooltip } from "@/components/chart-tooltip";
@@ -52,11 +59,6 @@ import { ChartTooltip } from "@/components/chart-tooltip";
   p-lines and the strip captions are .gg-caption.
 */
 
-/* Zero-padded hour labels; the band's exclusive end (endHour + 1) can
-   be 24, rendered "24:00", the same label math formatBand uses. */
-const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
-const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => hourLabel(h));
-
 /* Sanctioned strip geometry: the plot row is the sanctioned 240 px
    height (h-60); the zero-count stub stays a fixed 2 px. Bar heights
    are percentages of the plot row, so they scale with it unchanged. */
@@ -70,61 +72,10 @@ const SCALE_MARKS = [0, 25, 50, 75, 100] as const;
    leaves the strip on narrow screens (half its approx width is 92px). */
 const LABEL_CLAMP = 92;
 
-/*
-  Sanctioned editorial mapping from the band's start hour to the
-  statement's daypart words: a presentation constant, documented here,
-  never tuned per snapshot. Ranges are inclusive start to inclusive
-  end: 0 to 4 "the early night", 5 to 8 "the early morning", 9 to 11
-  "the morning", 12 to 16 "the afternoon", 17 to 19 "the evening",
-  20 to 23 "the night".
-*/
-const DAYPART_BY_START_HOUR: ReadonlyArray<readonly [maxHour: number, label: string]> = [
-  [4, "the early night"],
-  [8, "the early morning"],
-  [11, "the morning"],
-  [16, "the afternoon"],
-  [19, "the evening"],
-  [23, "the night"],
-];
-function daypartFor(startHour: number): string {
-  for (const [maxHour, label] of DAYPART_BY_START_HOUR) {
-    if (startHour <= maxHour) return label;
-  }
-  return "the night";
-}
-
-/*
-  The one seasonal-line threshold: a sanctioned editorial constant,
-  never tuned per snapshot. Below 50 percent frequency share the
-  caption calls the window thin this season; at or above 50 percent it
-  says the window holds up well.
-*/
-const SEASONAL_HOLDS_UP_PCT = 50;
-
-/*
-  Sanctioned editorial mapping from the snapshot month to the season
-  phrase in the section title: a presentation constant, documented
-  here, never tuned per snapshot. Meteorological seasons, with the
-  phase by month position within the season (month 1 = January):
-  12 "in early winter", 1 "in mid winter", 2 "in late winter",
-  3 "in early spring", 4 "in mid spring", 5 "in late spring",
-  6 "in early summer", 7 "in mid summer", 8 "in late summer",
-  9 "in early fall", 10 "in mid fall", 11 "in late fall".
-*/
-const SEASON_PHRASE_BY_MONTH: Record<number, string> = {
-  12: "in early winter",
-  1: "in mid winter",
-  2: "in late winter",
-  3: "in early spring",
-  4: "in mid spring",
-  5: "in late spring",
-  6: "in early summer",
-  7: "in mid summer",
-  8: "in late summer",
-  9: "in early fall",
-  10: "in mid fall",
-  11: "in late fall",
-};
+/* The editorial mappings (daypart table, month-to-season table, band
+   words, the 50 percent seasonal tier) live in the shared module
+   src/grid/editorial.ts, imported above, so the red-hours mirror card
+   can never drift from this card. */
 
 export function GreenWindowCard() {
   const gw = snapshot.greenWindow;
@@ -153,7 +104,7 @@ export function GreenWindowCard() {
   /* The season phrase in the section title derives from the snapshot's
      own freshness date (retrievedAt slice 0-10, the same source the
      snapshot-fresh sentence uses); never hardcoded to a season. */
-  const seasonPhrase = SEASON_PHRASE_BY_MONTH[Number(snapshot.retrievedAt.slice(5, 7))];
+  const seasonPhrase = seasonPhraseForMonth(Number(snapshot.retrievedAt.slice(5, 7)));
   const priceP30 = gw.percentiles.priceP30;
   const renP70 = gw.percentiles.renP70;
   const threshold = `green rule: price at or below ${formatNumber(priceP30, 1)} EUR/MWh and renewable share at or above ${formatNumber(renP70, 1)}%`;

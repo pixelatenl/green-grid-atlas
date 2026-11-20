@@ -248,20 +248,26 @@
   /*
     Green window / red hours markers on the heatmap. --gg-green-band is
     a true green hue family in both themes (the previous blue-teal
-    values read blue in the dark theme). Product-owner anchors, with
-    the computed WCAG ratios: light #1f8a4e reaches 3.97:1 against the
-    light plot background #eaf6f9 and 4.19:1 against the light card
-    #f6fbfc where the bracket sits; dark #5fd3a0 reaches 7.08:1 against
-    the dark plot background #0f353d and 5.98:1 against the dark card
-    #14414c. Bars and bracket are graphical objects, checked at the
-    3:1 threshold; the outside-band 45 percent mix of the same token
-    over the plot background stays distinct from the solid bars at
-    2.24:1 light and 2.67:1 dark. The red tokens are unchanged.
+    values read blue in the dark theme); --gg-red-band is a true red
+    hue family in both themes (the previous orange values read orange,
+    not red). Product-owner anchors, with the computed WCAG ratios:
+    light green #1f8a4e reaches 3.97:1 against the light plot
+    background #eaf6f9 and 4.19:1 against the light card #f6fbfc where
+    the bracket sits; dark green #5fd3a0 reaches 7.08:1 against the
+    dark plot background #0f353d and 5.98:1 against the dark card
+    #14414c. Light red #b91c1c reaches 5.87:1 against the light plot
+    background and 6.20:1 against the light card; dark red #f87171
+    reaches 4.75:1 against the dark plot background and 4.02:1 against
+    the dark card. Bars and bracket are graphical objects, checked at
+    the 3:1 threshold; the outside-band 45 percent mix of the same
+    token over the plot background stays distinct from the solid bars
+    between the mix and the solid tone (green 2.24:1 light and 2.67:1
+    dark; red 2.91:1 light and 2.35:1 dark).
   */
   --gg-green-band: #1f8a4e;
   --gg-green-band-soft: color-mix(in oklab, #2b8ba3 22%, transparent);
-  --gg-red-band: #a64b0c;
-  --gg-red-band-soft: color-mix(in oklab, #a64b0c 22%, transparent);
+  --gg-red-band: #b91c1c;
+  --gg-red-band-soft: color-mix(in oklab, #b91c1c 22%, transparent);
 
   /* Cross-border flows: imports positive, exports negative (disclosed). */
   --gg-flow-import: #48b9d1;
@@ -328,8 +334,11 @@
   */
   --gg-green-band: #5fd3a0;
   --gg-green-band-soft: color-mix(in oklab, #6fd0e2 22%, transparent);
-  --gg-red-band: #f48822;
-  --gg-red-band-soft: color-mix(in oklab, #f48822 22%, transparent);
+  /* Dark value of --gg-red-band, the true red family; see :root for the
+     per-theme contrast ratios (4.75:1 on the dark plot background
+     #0f353d, 4.02:1 on the dark card #14414c). */
+  --gg-red-band: #f87171;
+  --gg-red-band-soft: color-mix(in oklab, #f87171 22%, transparent);
 
   --gg-flow-import: #48b9d1;
   --gg-flow-export: #f48822;
