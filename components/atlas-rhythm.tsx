@@ -130,9 +130,9 @@ function RhythmFigure({
 
   return (
     <figure className="mt-5 first:mt-0">
-      <figcaption className="text-sm font-semibold">
+      <figcaption className="gg-caption font-semibold">
         {title}{" "}
-        <span className="ml-1 text-xs font-medium text-muted-foreground">{subtitle}</span>
+        <span className="ml-1 gg-caption font-medium">{subtitle}</span>
       </figcaption>
       <div className="mt-1 overflow-x-auto">
         <svg
@@ -202,7 +202,7 @@ function RhythmFigure({
       <div aria-hidden="true" className="mt-1 h-2 w-full rounded-full" style={{ background: rampGradientCss(ramp) }} />
       <div
         aria-hidden="true"
-        className="relative mt-0.5 h-3 w-full text-[9px] tabular-nums text-muted-foreground"
+        className="relative mt-0.5 h-3 w-full gg-label tabular-nums text-muted-foreground"
       >
         {ramp.anchors.map((a, i) => (
           <span
@@ -218,7 +218,7 @@ function RhythmFigure({
           </span>
         ))}
       </div>
-      {source && <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">{source}</p>}
+      {source && <p className="mt-1 gg-caption">{source}</p>}
     </figure>
   );
 }
@@ -248,7 +248,7 @@ export function AtlasRhythm() {
           hour falls between 00:00 and 05:00.
         </p>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">Hover any cell for its exact value.</p>
+      <p className="mt-2 gg-caption">Hover any cell for its exact value.</p>
 
       <RhythmTooltip>
         <div className="mt-2">
@@ -283,7 +283,7 @@ export function AtlasRhythm() {
         {/* weather small multiples on the same month-hour axes */}
         <section className="mt-8">
           <h3 className="text-lg font-extrabold tracking-tight">Weather that shapes it</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 gg-caption">
             {weatherAvailable
               ? `weather: ${weather.daysWithWeather} of ${weather.totalDays} days, Open-Meteo archive.`
               : "Weather data is unavailable in this snapshot, so no weather grids are shown."}
@@ -309,7 +309,7 @@ export function AtlasRhythm() {
               ))}
             </div>
           )}
-          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+          <p className="mt-2 gg-caption">
             Source: Open-Meteo historical weather archive (CC BY 4.0), central NL. Wind is shown in m/s,
             converted from the archive's km/h. Each mini-grid's mean per cell is taken only over days
             that carry weather values.
@@ -319,7 +319,7 @@ export function AtlasRhythm() {
 
       {/* partial edge months footnote, cutoff dates computed from the window */}
       {partialLabels.length > 0 && fromLabel && toLabel && (
-        <p className="mt-4 text-[10px] text-muted-foreground">
+        <p className="mt-4 gg-caption">
           * {partialLabels.join(" and ")} {partialLabels.length === 1 ? "is" : "are"} partial: the
           trailing window starts {fromLabel} and ends {toLabel}.
         </p>

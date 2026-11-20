@@ -245,8 +245,20 @@
   --gg-intensity-high: #a64b0c;
   --gg-gap: transparent;
 
-  /* Green window / red hours markers on the heatmap. */
-  --gg-green-band: #2b8ba3;
+  /*
+    Green window / red hours markers on the heatmap. --gg-green-band is
+    a true green hue family in both themes (the previous blue-teal
+    values read blue in the dark theme). Product-owner anchors, with
+    the computed WCAG ratios: light #1f8a4e reaches 3.97:1 against the
+    light plot background #eaf6f9 and 4.19:1 against the light card
+    #f6fbfc where the bracket sits; dark #5fd3a0 reaches 7.08:1 against
+    the dark plot background #0f353d and 5.98:1 against the dark card
+    #14414c. Bars and bracket are graphical objects, checked at the
+    3:1 threshold; the outside-band 45 percent mix of the same token
+    over the plot background stays distinct from the solid bars at
+    2.24:1 light and 2.67:1 dark. The red tokens are unchanged.
+  */
+  --gg-green-band: #1f8a4e;
   --gg-green-band-soft: color-mix(in oklab, #2b8ba3 22%, transparent);
   --gg-red-band: #a64b0c;
   --gg-red-band-soft: color-mix(in oklab, #a64b0c 22%, transparent);
@@ -309,7 +321,12 @@
   --gg-intensity-low: #174049;
   --gg-intensity-high: #f48822;
 
-  --gg-green-band: #6fd0e2;
+  /*
+    Dark value of --gg-green-band; see :root for the green hue family
+    and the computed per-theme contrast ratios (7.08:1 on the dark
+    plot background #0f353d, 5.98:1 on the dark card #14414c).
+  */
+  --gg-green-band: #5fd3a0;
   --gg-green-band-soft: color-mix(in oklab, #6fd0e2 22%, transparent);
   --gg-red-band: #f48822;
   --gg-red-band-soft: color-mix(in oklab, #f48822 22%, transparent);
@@ -461,4 +478,156 @@ svg .chart-tooltip-trigger:hover {
   --brand-accent: #f48822;
   --gg-red-band: #f48822;
   --gg-green-band: #6fd0e2;
+}
+
+/*
+  Typography scale (product-owned), codified once here and applied by
+  class everywhere on the page. Six named levels, loudest first:
+
+  - .gg-display   the hero h1 only
+  - .gg-heading   every section h2, the dominant voice after the hero
+  - .gg-statement one shared level for every derived in-card sentence
+  - .gg-lede      the description paragraph under each section heading
+  - .gg-caption   every chart and band caption line under a visual
+  - .gg-label     every micro label (uppercase key or badge)
+
+  Each level owns size, weight, leading and tracking (and color where
+  stated); components add only color or emphasis classes on top. Page
+  copy uses no other ad-hoc font-size, weight, leading or tracking
+  utility; chart SVG tick text (fontSize 8/9) is chart geometry and
+  stays outside the scale. The classes are unlayered on purpose, so a
+  scale level always beats a stray utility of the same property; where
+  a level needs an override color (the coda scrim), the override is a
+  documented rule below, not a component utility.
+*/
+
+/*
+  Display, level 1: the hero h1 only. Fluid clamp from 2.4rem to
+  4.5rem, heaviest weight, tight leading and negative tracking; the
+  em-based max-width keeps the headline shape at every width. Values
+  are the family classes it replaces, so FamilyHero renders
+  pixel-identical: text-[clamp(2.4rem,1.69rem+2.93vw,4.5rem)]
+  font-black leading-[1.05] tracking-[-0.03em] max-w-[11em].
+*/
+.gg-display {
+  font-size: clamp(2.4rem, 1.69rem + 2.93vw, 4.5rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  max-width: 11em;
+}
+
+/*
+  Heading, level 2: every section h2. Steps up toward display size so
+  the section title dominates its card instead of reading as a
+  subordinate label. Keeps the teal family pattern: primary in light,
+  white in dark. max-w-[18ch] lets longer titles break gracefully.
+*/
+.gg-heading {
+  font-size: clamp(1.75rem, 1.43rem + 0.85vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--primary);
+  max-width: 18ch;
+}
+.dark .gg-heading {
+  color: #fff;
+}
+
+/*
+  Wide-heading variant for section titles that carry a derived phrase
+  (the green window title plus its season phrase, e.g. "The green window
+  in late fall"). The scale's 18ch cap is unlayered on purpose, so this
+  override is a documented same-element rule, not a component utility:
+  with max-width lifted, the heading spans the full card content width,
+  so the title stays on a single line whenever that width is enough and
+  wraps naturally when it is not.
+*/
+.gg-heading.gg-heading-wide {
+  max-width: none;
+}
+
+/*
+  Statement, level 3: the ONE shared statement level for every derived
+  in-card sentence (the green window statement, the red hours
+  statement, each chapter headline, the coda stage headline). Replaces
+  the old per-card sizes, which stepped from text-3xl up to the top
+  utility size at the sm breakpoint and put the loudest type on the
+  page inside cards.
+*/
+.gg-statement {
+  font-size: clamp(1.5rem, 1.22rem + 0.74vw, 2.25rem);
+  font-weight: 900;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  color: var(--foreground);
+}
+
+/*
+  White photo treatment for the coda stage headline: inside
+  .coda-stage the statement sits on the dark scrim in both themes, so
+  it resolves to white there. This keeps the existing scrim contrast
+  math (see the .coda-scrim comment above): white over the weakest
+  scrim stop still reaches 13.0:1, WCAG AA in both themes.
+*/
+.coda-stage .gg-statement {
+  color: #fff;
+}
+
+/*
+  Lede, level 4: the description paragraph under each section heading
+  (the CardDescription slot in FamilySection). text-base stepping up
+  to text-lg from the sm breakpoint, relaxed leading, muted. The hero
+  deck and the coda deck keep their own current classes.
+*/
+.gg-lede {
+  font-size: 1rem;
+  line-height: 1.625;
+  color: var(--muted-foreground);
+}
+@media (min-width: 640px) {
+  .gg-lede {
+    font-size: 1.125rem;
+  }
+}
+
+/*
+  Caption, level 5: every chart and band caption line under a visual,
+  one class instead of the old ad-hoc text-[10px] and text-xs strings
+  (text-xs leading-relaxed text-muted-foreground).
+*/
+.gg-caption {
+  font-size: 0.75rem;
+  line-height: 1.625;
+  color: var(--muted-foreground);
+}
+
+/*
+  Label, level 6: every micro label (band cell hour scale, record stat
+  labels, criteria chip labels, extremes pair labels, legend labels).
+  One size, weight, uppercase and tracking instead of the old 10px and
+  11px variants and tracking-widest. Color is set per use on top of
+  this class (band-toned for the extremes pair, muted for stat labels).
+*/
+.gg-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+/*
+  Coda stage caption color: captions inside the photo stage sit on the
+  dark scrim, so the muted default resolves to white at 60 percent,
+  exactly the tone those lines carried before. Over the weakest scrim
+  stop that is 7.2:1, WCAG AA in both themes (see the .coda-scrim
+  comment above). The photo credit corner keeps its brighter 75
+  percent white, about 9:1 on the same stop.
+*/
+.coda-stage .gg-caption {
+  color: rgb(255 255 255 / 0.6);
+}
+.coda-stage .coda-credit {
+  color: rgb(255 255 255 / 0.75);
 }

@@ -28,13 +28,13 @@ function Chip({ indicator }: { indicator: RiskIndicator }) {
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-bold tracking-tight">{indicator.label}</p>
         <span
-          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${LEVEL_STYLE[indicator.level] ?? LEVEL_STYLE.unknown}`}
+          className={`rounded-full border px-2 py-0.5 gg-label ${LEVEL_STYLE[indicator.level] ?? LEVEL_STYLE.unknown}`}
         >
           {indicator.level}
         </span>
       </div>
       <p className="text-2xl font-extrabold tabular-nums tracking-tight">{valueText}</p>
-      <p className="text-xs leading-relaxed text-muted-foreground">{indicator.rule}</p>
+      <p className="gg-caption">{indicator.rule}</p>
     </div>
   );
 }

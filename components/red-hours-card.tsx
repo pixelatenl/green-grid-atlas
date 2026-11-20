@@ -38,7 +38,7 @@ export function RedHoursCard() {
       }
       description={`The exact inverse of the green window rule, from the same code path: price at or above p${WINDOW_PARAMS.RED_PRICE_PERCENTILE} and renewable share at or below p${WINDOW_PARAMS.RED_RENEWABLE_PERCENTILE} (expensive and low-renewable at the same time).`}
     >
-      <p className="text-3xl font-black leading-[1.05] tracking-tight sm:text-5xl">
+      <p className="gg-statement">
         {band ? (
           <>
             The priciest, dirtiest hours usually land at{" "}
@@ -50,7 +50,7 @@ export function RedHoursCard() {
           <>No recurring red band in the last {gw.red.days} days.</>
         )}
       </p>
-      <p className="mt-3 max-w-[62ch] text-sm text-muted-foreground">
+      <p className="mt-3 max-w-[62ch] gg-caption">
         Red means day-ahead price at or above {formatNumber(gw.percentiles.priceP70, 1)} EUR/MWh (p{WINDOW_PARAMS.RED_PRICE_PERCENTILE}
         of the trailing {WINDOW_PARAMS.TRAILING_DAYS} days) <span aria-hidden="true">AND</span> renewable share of
         generation at or below {formatNumber(gw.percentiles.renP30, 1)}% (p{WINDOW_PARAMS.RED_RENEWABLE_PERCENTILE}), the exact
@@ -85,7 +85,7 @@ export function RedHoursCard() {
               );
             })}
           </div>
-          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+          <div className="mt-1 flex justify-between gg-label text-muted-foreground">
             <span>00:00</span>
             <span>06:00</span>
             <span>12:00</span>

@@ -243,7 +243,7 @@ function Chapter({
   const narration = narrationFor(id);
   return (
     <FamilySection title={title} description={description}>
-      <p className="text-xl font-bold leading-snug tracking-tight sm:text-2xl">{headline}</p>
+      <p className="gg-statement">{headline}</p>
       {children}
       {narration && <AiInsight text={narration} />}
     </FamilySection>

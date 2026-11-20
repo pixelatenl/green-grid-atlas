@@ -44,7 +44,7 @@ function MixBar({ mix }: { mix: Record<string, number | null> | undefined }) {
           <div key={e.t} className={`h-full ${colors[i % colors.length]}`} style={{ width: `${(e.v / total) * 100}%` }} />
         ))}
       </div>
-      <p className="mt-1 text-[10px] leading-relaxed text-white/60">
+      <p className="mt-1 gg-caption">
         {entries.map((e) => `${EMISSION_FACTORS[e.t]?.label ?? e.t} ${formatNumber(e.v, 0)} MW`).join(" · ")}
       </p>
     </div>
@@ -84,10 +84,10 @@ export function Coda() {
         <div aria-hidden="true" className="coda-scrim absolute inset-0" />
 
         <div className="relative p-4 pb-9 sm:p-6 sm:pb-10">
-          <p className="w-fit rounded-full border border-white/25 bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-white">
+          <p className="w-fit rounded-full border border-white/25 bg-black/40 px-2.5 py-1 gg-label text-white">
             The extremes
           </p>
-          <h2 className="mt-3 max-w-[22ch] text-3xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-5xl">
+          <h2 className="mt-3 max-w-[22ch] gg-statement">
             From <span className="tabular-nums text-brand-accent">{dirtiest ? formatNumber(dirtiest.value, 0) : "n/a"}</span>{" "}
             to <span className="tabular-nums">{cleanest ? formatNumber(cleanest.value, 0) : "n/a"}</span> g CO2-eq/kWh
           </h2>
@@ -100,8 +100,8 @@ export function Coda() {
               labels, band tones kept, mix bars retained */}
           <div className="mt-6 grid gap-4 sm:grid-cols-2 sm:gap-6">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gg-red-band">Dirtiest hour on record</p>
-              <p className="mt-1 text-4xl font-black tabular-nums tracking-tight text-white sm:text-5xl">
+              <p className="gg-label text-gg-red-band">Dirtiest hour on record</p>
+              <p className="mt-1 text-4xl font-black tabular-nums tracking-tight text-white sm:text-4xl">
                 {dirtiest ? formatNumber(dirtiest.value, 0) : "n/a"}
                 <span className="ml-1 text-sm font-semibold text-white/70">g CO2-eq/kWh</span>
               </p>
@@ -111,8 +111,8 @@ export function Coda() {
               <MixBar mix={dirtiest?.mix} />
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gg-green-band">Cleanest hour on record</p>
-              <p className="mt-1 text-4xl font-black tabular-nums tracking-tight text-white sm:text-5xl">
+              <p className="gg-label text-gg-green-band">Cleanest hour on record</p>
+              <p className="mt-1 text-4xl font-black tabular-nums tracking-tight text-white sm:text-4xl">
                 {cleanest ? formatNumber(cleanest.value, 0) : "n/a"}
                 <span className="ml-1 text-sm font-semibold text-white/70">g CO2-eq/kWh</span>
               </p>
@@ -127,19 +127,19 @@ export function Coda() {
           <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-white/15 pt-4 sm:grid-cols-3 lg:grid-cols-5">
             {stats.map((r) => (
               <div key={r.key}>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/70">{r.label}</p>
+                <p className="gg-label text-white/70">{r.label}</p>
                 <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight text-white sm:text-3xl">
                   {formatNumber(r.value, r.unit.includes("EUR") ? 2 : 0)}
                   <span className="ml-1 text-xs font-semibold text-white/70">{r.unit}</span>
                 </p>
-                <p className="mt-1 text-[11px] leading-snug text-white/60">{r.localLabel}</p>
-                <p className="text-[11px] italic leading-snug text-white/60">{RECORD_NOTES[r.key] ?? ""}</p>
+                <p className="mt-1 gg-caption">{r.localLabel}</p>
+                <p className="gg-caption italic">{RECORD_NOTES[r.key] ?? ""}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <p className="absolute bottom-2 right-3 text-[10px] leading-none text-white/75">
+        <p className="coda-credit gg-caption absolute bottom-2 right-3">
           Photo by{" "}
           <a className="underline underline-offset-2 hover:text-white" href="https://unsplash.com/@nrdoherty">
             Nicholas Doherty

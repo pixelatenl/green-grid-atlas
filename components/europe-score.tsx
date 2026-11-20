@@ -47,7 +47,7 @@ export function EuropeScore() {
                   className={`absolute inset-y-0 left-0 rounded ${isNL ? "bg-brand-accent" : "chart-gradient-1"}`}
                   style={{ width: `${((c.score ?? 0) / max) * 100}%` }}
                 />
-                <span className="absolute inset-y-0 left-2 flex items-center text-[10px] font-semibold tabular-nums text-foreground">
+                <span className="absolute inset-y-0 left-2 flex items-center gg-label tabular-nums text-foreground">
                   {c.score != null ? formatNumber(c.score, 1) : "n/a"}
                 </span>
               </span>
@@ -58,7 +58,7 @@ export function EuropeScore() {
           );
         })}
       </ol>
-      <p className="mt-3 text-xs text-muted-foreground">
+      <p className="mt-3 gg-caption">
         Score 0–100 per the composition above; “ren.” is the trailing-365-day mean daily renewable share of
         load. The Netherlands refreshes daily; the other zones refresh weekly.
       </p>

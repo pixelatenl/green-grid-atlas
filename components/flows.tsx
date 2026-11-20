@@ -255,12 +255,12 @@ export function Flows() {
           ))}
         </div>
       </ChartTooltip>
-      <p className="mt-4 text-sm text-muted-foreground">
+      <p className="mt-4 gg-caption">
         Daily mean physical flows, trailing 12 months ({snapshot.trailing.from} – {snapshot.trailing.to}).
       </p>
 
       <h3 className="mt-6 text-lg font-bold tracking-tight">Net flow per neighbor, TWh per year</h3>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-1 gg-caption">
         Imports positive (teal), exports negative (orange).{" "}
         {lastYear && total ? (
           <>
