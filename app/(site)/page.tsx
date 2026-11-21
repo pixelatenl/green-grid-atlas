@@ -1,8 +1,8 @@
 import { FamilyHero } from "@/components/family-hero";
 import { GreenWindowCard } from "@/components/green-window-card";
+import { RedHoursCard } from "@/components/red-hours-card";
 import { AtlasRhythm } from "@/components/atlas-rhythm";
 import { Chapters } from "@/components/chapters";
-import { RedHoursCard } from "@/components/red-hours-card";
 import { Flows } from "@/components/flows";
 import { RiskIndicators } from "@/components/risk-indicators";
 import { EuropeScore } from "@/components/europe-score";
@@ -14,10 +14,14 @@ import { formatDate } from "@/format-date";
 import { formatBand } from "@/grid/green-window";
 
 /*
-  The single page: story leads, atlas inside. Card order per the brief.
-  Every figure is computed from the snapshot at render time; the only
-  literals here are copy. Anti-dashboard rule: no section is titled after
-  its chart type; every visual is introduced by what it means.
+  The single page: story leads, atlas inside. Section order groups the
+  trailing-30-day sections first (the window cards, then the day
+  chapters), then the two trailing-year sections adjacent (the year
+  grid, then the cross-border flows), widening the story from home to
+  the borders. Every figure is computed from the snapshot at render
+  time; the only literals here are copy. Anti-dashboard rule: no
+  section is titled after its chart type; every visual is introduced
+  by what it means.
 */
 export default function Home() {
   const gw = snapshot.greenWindow;
@@ -53,6 +57,9 @@ export default function Home() {
       </section>
 
       <GreenWindowCard />
+      <RedHoursCard />
+
+      <Chapters />
 
       <FamilySection
         title="The year has a shape"
@@ -67,8 +74,6 @@ export default function Home() {
         <AtlasRhythm />
       </FamilySection>
 
-      <Chapters />
-      <RedHoursCard />
       <Flows />
       <RiskIndicators />
       <EuropeScore />

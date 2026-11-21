@@ -9,6 +9,8 @@
  * this file, with any change stated in the PR description.
  */
 
+import { bandWords } from "./editorial.ts";
+
 export const WINDOW_PARAMS = {
   /** Trailing window length in days; each hour is an independent sample. */
   TRAILING_DAYS: 30,
@@ -26,7 +28,7 @@ export const WINDOW_PARAMS = {
  * The rule, verbatim as repeated in the method drawer. Keep in sync with
  * WINDOW_PARAMS and the implementation below.
  */
-export const WINDOW_RULE_TEXT = `The green window is computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days of hourly values (price and renewable share of generation), each hour independent. A green hour has price at or below the ${WINDOW_PARAMS.GREEN_PRICE_PERCENTILE}th percentile of the trailing price distribution AND renewable share at or above the ${WINDOW_PARAMS.GREEN_RENEWABLE_PERCENTILE}th percentile of the trailing renewable-share distribution. A red hour is the exact inverse through the same code path: price at or above the ${WINDOW_PARAMS.RED_PRICE_PERCENTILE}th percentile AND renewable share at or below the ${WINDOW_PARAMS.RED_RENEWABLE_PERCENTILE}th percentile. For each day, the contiguous hour bands qualifying are collected; the rendered window is the modal recurring band (the band shape most frequent in the trailing window), displayed with its frequency share (share of trailing days having that band). Single qualifying hours outside bands are shown on the heatmap but do not form the window. Percentiles use linear interpolation on the sorted hourly sample. Basis: renewable share of generation (NL generation mix); price is the NL day-ahead price.`;
+export const WINDOW_RULE_TEXT = `The green window is computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days of hourly values (price and renewable share of generation), each hour independent. A green hour has price at or below the ${WINDOW_PARAMS.GREEN_PRICE_PERCENTILE}th percentile of the trailing price distribution AND renewable share at or above the ${WINDOW_PARAMS.GREEN_RENEWABLE_PERCENTILE}th percentile of the trailing renewable-share distribution. A red hour is the exact inverse through the same code path: price at or above the ${WINDOW_PARAMS.RED_PRICE_PERCENTILE}th percentile AND renewable share at or below the ${WINDOW_PARAMS.RED_RENEWABLE_PERCENTILE}th percentile. The rendered window is the hour interval (at least two contiguous wall-clock hours) that recurs most often as a whole: the number of trailing days on which every hour of the interval qualifies under the rule above. Ties prefer the longer interval, then the earliest start. Its frequency share is the share of trailing days on which the full interval qualifies. Hours qualifying outside the window still count in the frequency strip and the risk indicators individually. Percentiles use linear interpolation on the sorted hourly sample. Basis: renewable share of generation (NL generation mix); price is the NL day-ahead price. The strip can also mark one other recurring window: the strongest interval that qualifies on at least half as many days as the window and is separated from it by at least one hour. It is drawn fainter than the window and named with its opening share in the caption.`;
 
 /** One hourly sample of the trailing window. */
 export interface WindowHour {
@@ -51,11 +53,13 @@ export interface WindowSide {
   thresholds: { price: number; ren: number };
   /** Qualifying wall-clock hours per day, for the heatmap markers. */
   qualifyingHours: Record<string, number[]>;
-  /** Contiguous bands of length >= 2 per day (single hours excluded). */
+  /** Contiguous bands of length >= 2 per day; kept in the snapshot schema,
+      but no longer used to pick the window (see classifySide). */
   bands: Record<string, Band[]>;
-  /** Single qualifying hours per day (shown on the heatmap, never a window). */
+  /** Single qualifying hours per day; kept in the snapshot schema, never a window. */
   singles: Record<string, number[]>;
-  /** The modal recurring band and its frequency share of trailing days. */
+  /** The joint-recurring window interval and its frequency share of
+      trailing days; null when no interval of length >= 2 recurs. */
   modalBand: Band | null;
   frequencyShare: number;
   /** Number of trailing days in the sample. */
@@ -95,7 +99,9 @@ export function percentile(values: number[], p: number): number {
 /**
  * The one code path behind both sides: classify each day's wall-clock
  * hours with the given threshold/comparator pair, then extract contiguous
- * bands. Green calls it with (priceP30, "le", renP70, "ge"); red with
+ * bands and singles (kept in the snapshot schema). The window itself is
+ * picked by joint recurrence over the per-day qualifying sets, below.
+ * Green calls it with (priceP30, "le", renP70, "ge"); red with
  * (priceP70, "ge", renP30, "le"): the exact inverse parameters.
  */
 function classifySide(
@@ -115,7 +121,6 @@ function classifySide(
   const qualifyingHours: Record<string, number[]> = {};
   const bands: Record<string, Band[]> = {};
   const singles: Record<string, number[]> = {};
-  const bandCounts = new Map<string, { band: Band; count: number }>();
 
   for (const date of days) {
     // A wall-clock hour qualifies if any of its slots qualifies (the doubled
@@ -145,20 +150,41 @@ function classifySide(
     const kept = runs.filter((r) => r.endHour > r.startHour);
     singles[date] = runs.filter((r) => r.endHour === r.startHour).map((r) => r.startHour);
     bands[date] = kept;
-    for (const b of kept) {
-      const key = `${b.startHour}-${b.endHour}`;
-      const entry = bandCounts.get(key) ?? { band: b, count: 0 };
-      entry.count += 1;
-      bandCounts.set(key, entry);
-    }
   }
 
+  // Joint recurrence, the window picker: an interval (startHour, endHour)
+  // with startHour < endHour <= 23 (length >= 2) recurs on a day when EVERY
+  // wall-clock hour of the interval qualifies that day; qualifying hours
+  // outside the interval do not matter. The window is the interval with the
+  // highest joint day count; ties prefer the longer interval, then the
+  // earliest startHour. A highest joint count of 0 leaves modalBand null
+  // (the empty-window states render unchanged).
+  const presentByDay = days.map((date) => {
+    const present = new Array(24).fill(false);
+    for (const h of qualifyingHours[date]) present[h] = true;
+    return present;
+  });
   let modalBand: Band | null = null;
   let modalCount = 0;
-  for (const { band, count } of bandCounts.values()) {
-    if (count > modalCount || (count === modalCount && modalBand && band.startHour < modalBand.startHour)) {
-      modalBand = band;
-      modalCount = count;
+  const beats = (count: number, len: number, startHour: number): boolean => {
+    if (modalBand === null) return count > 0;
+    if (count !== modalCount) return count > modalCount;
+    const bestLen = modalBand.endHour - modalBand.startHour;
+    if (len !== bestLen) return len > bestLen;
+    return startHour < modalBand.startHour;
+  };
+  for (let startHour = 0; startHour <= 22; startHour++) {
+    for (let endHour = startHour + 1; endHour <= 23; endHour++) {
+      let count = 0;
+      for (const present of presentByDay) {
+        let all = true;
+        for (let h = startHour; h <= endHour && all; h++) all = present[h];
+        if (all) count++;
+      }
+      if (beats(count, endHour - startHour, startHour)) {
+        modalBand = { startHour, endHour };
+        modalCount = count;
+      }
     }
   }
   return {
@@ -195,6 +221,85 @@ export function computeWindow(hours: WindowHour[]): WindowResult {
     windowStartUtc: usable.length ? Math.min(...usable.map((h) => h.utc)) : 0,
     windowEndUtc: usable.length ? Math.max(...usable.map((h) => h.utc)) : 0,
   };
+}
+
+/** The other recurring window on one side: an interval of at least two
+    contiguous hours plus the number of trailing days on which every hour
+    of it qualifies. */
+export interface OtherWindow {
+  startHour: number;
+  endHour: number;
+  /** Trailing days on which every hour of the interval qualifies. */
+  count: number;
+}
+
+/**
+ * The other recurring window on one side of the snapshot, derived purely
+ * from the side's qualifyingHours (never taking the stored modalBand as
+ * its own winner). Every interval of at least two contiguous hours
+ * (startHour < endHour <= 23) is joint-counted over the trailing days and
+ * ranked with the same beats rule as the window itself (count desc, then
+ * interval length desc, then earliest start). A candidate counts as the
+ * other window when it is separated from the stored winner by at least
+ * one hour (no overlap, no touching) and its joint count is at least half
+ * the winner's opening days (bandDays = Math.round(frequencyShare * days)).
+ * Returns the strongest such interval, at most one, or null when none
+ * exists (also when the winner is null or days is 0).
+ */
+export function otherRecurringWindow(side: WindowSide, days: number): OtherWindow | null {
+  const winner = side.modalBand;
+  if (winner === null || days === 0) return null;
+  const bandDays = Math.round(side.frequencyShare * days);
+  const dates = Object.keys(side.qualifyingHours).sort();
+  const presentByDay = dates.map((date) => {
+    const present = new Array(24).fill(false);
+    for (const h of side.qualifyingHours[date]) {
+      if (h >= 0 && h < 24) present[h] = true;
+    }
+    return present;
+  });
+  let best: OtherWindow | null = null;
+  const beats = (count: number, len: number, startHour: number): boolean => {
+    if (best === null) return count > 0;
+    if (count !== best.count) return count > best.count;
+    const bestLen = best.endHour - best.startHour;
+    if (len !== bestLen) return len > bestLen;
+    return startHour < best.startHour;
+  };
+  for (let startHour = 0; startHour <= 22; startHour++) {
+    for (let endHour = startHour + 1; endHour <= 23; endHour++) {
+      // Separation: no overlap and no touching with the winner, at least
+      // one full hour in between.
+      if (!(startHour > winner.endHour + 1 || endHour + 1 < winner.startHour)) continue;
+      let count = 0;
+      for (const present of presentByDay) {
+        let all = true;
+        for (let h = startHour; h <= endHour && all; h++) all = present[h];
+        if (all) count++;
+      }
+      if (count * 2 >= bandDays && beats(count, endHour - startHour, startHour)) {
+        best = { startHour, endHour, count };
+      }
+    }
+  }
+  return best;
+}
+
+/* Zero-decimal en-GB percent formatting, mirroring formatNumber(v, 0) from
+   src/data/snapshot.ts, which this module cannot import here: the snapshot
+   scripts run this file directly in Node, where the @/ alias and the JSON
+   import in snapshot.ts do not resolve. */
+const formatShare0 = (v: number): string =>
+  new Intl.NumberFormat("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+
+/**
+ * The shared caption sentence for the second bracket, so the green card
+ * and the red mirror card can never drift apart: band words from the
+ * shared bandWords helper, opening share zero-decimal like the cards.
+ */
+export function otherWindowSentence(w: OtherWindow, days: number): string {
+  const share = days > 0 ? formatShare0((w.count / days) * 100) : "0";
+  return `A second, fainter bracket marks another recurring window between ${bandWords(w.startHour, w.endHour)}, opening on ${share}% of days.`;
 }
 
 /** Format a band as "12:00–15:00" (wall-clock, Europe/Amsterdam). */

@@ -1,6 +1,13 @@
 import { snapshot, formatNumber } from "@/data/snapshot";
 import { narrationFor } from "@/data/narration";
-import { formatBand, WINDOW_PARAMS } from "@/grid/green-window";
+import { formatBand, WINDOW_PARAMS, otherRecurringWindow, otherWindowSentence } from "@/grid/green-window";
+import {
+  HOUR_LABELS,
+  SEASONAL_HOLDS_UP_PCT,
+  daypartFor,
+  hourLabel,
+  seasonPhraseForMonth,
+} from "@/grid/editorial";
 import { FamilySection } from "@/components/family-section";
 import { AiInsight } from "@/components/ai-insight";
 import { ChartTooltip } from "@/components/chart-tooltip";
@@ -30,9 +37,21 @@ import { ChartTooltip } from "@/components/chart-tooltip";
     its fixed 2 px height and its tone, 1.52:1 light, 2.01:1 dark
     against the plot background, and 2.61:1 light, 3.53:1 dark next to
     the solid band green).
-  Under the bars a bracket spans exactly the modal band hours, placed
-  with percentage math from startHour/endHour, with up-ticks at both
-  ends and a centered micro label. The plot carries a real vertical
+  Under the bars a bracket row spans exactly the modal band hours, the
+  winner bracket placed with percentage math from startHour/endHour,
+  with up-ticks at both ends and a centered micro label ("recurring
+  window", bare form per the product owner). When the rule's other
+  recurring window exists (otherRecurringWindow in
+  src/grid/green-window.ts: the strongest interval separated from the
+  winner by at least one hour that qualifies on at least half as many
+  days), a second, fainter bracket is drawn in the same row with the
+  same percentage geometry: the band token at 45 percent, smaller
+  up-ticks that still reach down to the line's bottom edge so they
+  stay connected to it, and its own centered "recurring window"
+  micro label, clamped to the strip exactly like the winner's label;
+  the caption sentence and the strip's aria-label also carry the
+  opening share.
+  The plot carries a real vertical
   scale: a left gutter percent axis beside the plot, muted gridlines at
   quarter, half and three-quarter plot height, and the "green on half
   the days" label pinned on the half-height line; the plot's own
@@ -52,11 +71,6 @@ import { ChartTooltip } from "@/components/chart-tooltip";
   p-lines and the strip captions are .gg-caption.
 */
 
-/* Zero-padded hour labels; the band's exclusive end (endHour + 1) can
-   be 24, rendered "24:00", the same label math formatBand uses. */
-const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
-const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => hourLabel(h));
-
 /* Sanctioned strip geometry: the plot row is the sanctioned 240 px
    height (h-60); the zero-count stub stays a fixed 2 px. Bar heights
    are percentages of the plot row, so they scale with it unchanged. */
@@ -70,61 +84,25 @@ const SCALE_MARKS = [0, 25, 50, 75, 100] as const;
    leaves the strip on narrow screens (half its approx width is 92px). */
 const LABEL_CLAMP = 92;
 
-/*
-  Sanctioned editorial mapping from the band's start hour to the
-  statement's daypart words: a presentation constant, documented here,
-  never tuned per snapshot. Ranges are inclusive start to inclusive
-  end: 0 to 4 "the early night", 5 to 8 "the early morning", 9 to 11
-  "the morning", 12 to 16 "the afternoon", 17 to 19 "the evening",
-  20 to 23 "the night".
-*/
-const DAYPART_BY_START_HOUR: ReadonlyArray<readonly [maxHour: number, label: string]> = [
-  [4, "the early night"],
-  [8, "the early morning"],
-  [11, "the morning"],
-  [16, "the afternoon"],
-  [19, "the evening"],
-  [23, "the night"],
-];
-function daypartFor(startHour: number): string {
-  for (const [maxHour, label] of DAYPART_BY_START_HOUR) {
-    if (startHour <= maxHour) return label;
-  }
-  return "the night";
-}
+/* Strip tick row geometry, shared by the green and red cards
+   byte-identically: the interior boundary ticks anchor to the strip's
+   24-cell hour grid, the same geometry the bars, the brackets and the
+   tooltip axis (data-x0, data-x1, data-units 24) use, so hour h sits
+   at exactly (h / 24) * 100 percent of the plot width. Pure geometry,
+   never statistics. */
+const TICK_BOUNDARY_HOURS = [6, 12, 18] as const;
 
-/*
-  The one seasonal-line threshold: a sanctioned editorial constant,
-  never tuned per snapshot. Below 50 percent frequency share the
-  caption calls the window thin this season; at or above 50 percent it
-  says the window holds up well.
-*/
-const SEASONAL_HOLDS_UP_PCT = 50;
+/* Window chip text at title level, mirroring the chapters chip: states
+   the card's time basis beside the heading; the day count interpolates
+   WINDOW_PARAMS, never hardcoded. aria-hidden: the criteria chip support
+   lines and the strip caption already announce the trailing window, so
+   the chip never double-announces. */
+const chipText = `Last ${WINDOW_PARAMS.TRAILING_DAYS} days`;
 
-/*
-  Sanctioned editorial mapping from the snapshot month to the season
-  phrase in the section title: a presentation constant, documented
-  here, never tuned per snapshot. Meteorological seasons, with the
-  phase by month position within the season (month 1 = January):
-  12 "in early winter", 1 "in mid winter", 2 "in late winter",
-  3 "in early spring", 4 "in mid spring", 5 "in late spring",
-  6 "in early summer", 7 "in mid summer", 8 "in late summer",
-  9 "in early fall", 10 "in mid fall", 11 "in late fall".
-*/
-const SEASON_PHRASE_BY_MONTH: Record<number, string> = {
-  12: "in early winter",
-  1: "in mid winter",
-  2: "in late winter",
-  3: "in early spring",
-  4: "in mid spring",
-  5: "in late spring",
-  6: "in early summer",
-  7: "in mid summer",
-  8: "in late summer",
-  9: "in early fall",
-  10: "in mid fall",
-  11: "in late fall",
-};
+/* The editorial mappings (daypart table, month-to-season table, band
+   words, the 50 percent seasonal tier) live in the shared module
+   src/grid/editorial.ts, imported above, so the red-hours mirror card
+   can never drift from this card. */
 
 export function GreenWindowCard() {
   const gw = snapshot.greenWindow;
@@ -153,7 +131,7 @@ export function GreenWindowCard() {
   /* The season phrase in the section title derives from the snapshot's
      own freshness date (retrievedAt slice 0-10, the same source the
      snapshot-fresh sentence uses); never hardcoded to a season. */
-  const seasonPhrase = SEASON_PHRASE_BY_MONTH[Number(snapshot.retrievedAt.slice(5, 7))];
+  const seasonPhrase = seasonPhraseForMonth(Number(snapshot.retrievedAt.slice(5, 7)));
   const priceP30 = gw.percentiles.priceP30;
   const renP70 = gw.percentiles.renP70;
   const threshold = `green rule: price at or below ${formatNumber(priceP30, 1)} EUR/MWh and renewable share at or above ${formatNumber(renP70, 1)}%`;
@@ -166,6 +144,9 @@ export function GreenWindowCard() {
       if (h >= 0 && h < 24) counts[h] += 1;
     }
   }
+  /* The second recurring window, derived from the same qualifyingHours
+     by the shared rule (never hardcoded); null when there is none. */
+  const other = otherRecurringWindow(gw.green, days);
   const inBand = (h: number) => band != null && h >= band.startHour && h <= band.endHour;
   const pctOf = (h: number) => (days > 0 ? formatNumber((counts[h] / days) * 100, 0) : "0");
 
@@ -183,14 +164,21 @@ export function GreenWindowCard() {
     } the recurring window.`;
   const stripAria = `Per-hour frequency strip over the trailing ${days} days: how many days each hour met the green rule. The recurring window ${
     band ? formatBand(band) : "is empty"
-  }, on ${formatNumber(sharePct, 0)}% of the trailing ${days} days. Vertical scale: the percentage of the trailing ${days} days on which each hour met the green rule.`;
+  }, opening on ${formatNumber(sharePct, 0)}% of the trailing ${days} days. Vertical scale: the percentage of the trailing ${days} days on which each hour met the green rule.${
+    other ? ` ${otherWindowSentence(other, days)}` : ""
+  }`;
 
   /* Bracket math: the range line spans exactly the modal band hours as
-     a percentage of the 24 hour columns. */
+     a percentage of the 24 hour columns. The other window's bracket
+     uses the same percentage geometry and its own clamped label
+     position, mirroring the winner's label math. */
   const bracketLeft = band ? (band.startHour / 24) * 100 : 0;
   const bracketWidth = band ? ((band.endHour - band.startHour + 1) / 24) * 100 : 0;
   const bracketCenter = bracketLeft + bracketWidth / 2;
   const labelLeft = `clamp(${LABEL_CLAMP}px, ${bracketCenter}%, calc(100% - ${LABEL_CLAMP}px))`;
+  const otherLeft = other ? (other.startHour / 24) * 100 : 0;
+  const otherWidth = other ? ((other.endHour - other.startHour + 1) / 24) * 100 : 0;
+  const otherLabelLeft = `clamp(${LABEL_CLAMP}px, ${otherLeft + otherWidth / 2}%, calc(100% - ${LABEL_CLAMP}px))`;
 
   /* The three honest bar states; heights are a share of the plot row,
      widths a fixed 80 percent of the hour cell. */
@@ -214,9 +202,16 @@ export function GreenWindowCard() {
       title={
         <>
           The <span className="text-brand-accent">green window</span> {seasonPhrase}
+          {/* the window chip, same pattern as the chapters titles */}
+          <span
+            aria-hidden="true"
+            className="gg-label ml-3 inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 align-middle text-muted-foreground"
+          >
+            {chipText}
+          </span>
         </>
       }
-      description={`The recurring hours when Dutch power is both cheap and clean, computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days.`}
+      description="The recurring hours when Dutch power is both cheap and clean."
     >
       <p className="gg-statement">
         {band ? (
@@ -331,9 +326,9 @@ export function GreenWindowCard() {
                 </div>
               </div>
 
-              {/* bracket marking the recurring window: a thin range line
-                  over exactly the modal band hours, up-ticks at both ends,
-                  centered micro label; only drawn when a band exists */}
+              {/* bracket row: the winner bracket over exactly the modal
+                  band hours, plus at most one fainter bracket for the
+                  other recurring window; only drawn when a band exists */}
               {band && (
                 <div aria-hidden="true" className="relative mt-1 h-7">
                   <div
@@ -349,22 +344,68 @@ export function GreenWindowCard() {
                       style={{ background: "var(--gg-green-band)" }}
                     />
                   </div>
+                  {/* the other recurring window: same percentage geometry
+                      from startHour/endHour, muted to 45 percent of the
+                      band token, smaller up-ticks that still reach down
+                      to the line's bottom edge (top -3px with height
+                      5px over the 2px line, like the winner's ticks),
+                      and its own clamped "recurring window" label; the
+                      caption and the aria-label carry the share sentence */}
+                  {other && (
+                    <div
+                      className="absolute top-[6px] h-[2px]"
+                      style={{
+                        left: `${otherLeft}%`,
+                        width: `${otherWidth}%`,
+                        background: "color-mix(in oklab, var(--gg-green-band) 45%, transparent)",
+                      }}
+                    >
+                      <span
+                        className="absolute left-0 top-[-3px] h-[5px] w-[1.5px]"
+                        style={{ background: "color-mix(in oklab, var(--gg-green-band) 45%, transparent)" }}
+                      />
+                      <span
+                        className="absolute right-0 top-[-3px] h-[5px] w-[1.5px]"
+                        style={{ background: "color-mix(in oklab, var(--gg-green-band) 45%, transparent)" }}
+                      />
+                    </div>
+                  )}
                   <span
                     className="gg-label absolute top-[10px] whitespace-nowrap text-muted-foreground"
                     style={{ left: labelLeft, transform: "translateX(-50%)" }}
                   >
-                    the recurring window
+                    recurring window
                   </span>
+                  {other && (
+                    <span
+                      className="gg-label absolute top-[10px] whitespace-nowrap text-muted-foreground"
+                      style={{ left: otherLabelLeft, transform: "translateX(-50%)" }}
+                    >
+                      recurring window
+                    </span>
+                  )}
                 </div>
               )}
 
-              {/* hour ticks below the strip, as before */}
-              <div className="mt-1 flex justify-between gg-label text-muted-foreground">
+              {/* hour ticks below the strip: true day boundaries anchored
+                  to the strip's 24-cell hour grid. 00:00 stays in normal
+                  flow, anchoring the row's left edge at the hour 0
+                  boundary and keeping the row's natural line height; the
+                  quarter boundaries center on their exact positions; the
+                  24:00 end-of-day tick pins flush right, marking the end
+                  of the local day (Europe/Amsterdam). */}
+              <div className="relative mt-1 gg-label text-muted-foreground">
                 <span>00:00</span>
-                <span>06:00</span>
-                <span>12:00</span>
-                <span>18:00</span>
-                <span>23:00</span>
+                {TICK_BOUNDARY_HOURS.map((h) => (
+                  <span
+                    key={h}
+                    className="absolute top-0"
+                    style={{ left: `${(h / 24) * 100}%`, transform: "translateX(-50%)" }}
+                  >
+                    {`${String(h).padStart(2, "0")}:00`}
+                  </span>
+                ))}
+                <span className="absolute top-0 right-0">24:00</span>
               </div>
             </div>
           </div>
@@ -377,7 +418,7 @@ export function GreenWindowCard() {
         many of the trailing {days} days that hour met the green rule, counting any qualifying day, lone hours
         included.{" "}
         {band
-          ? `The bracket marks the recurring window: the contiguous band shape most frequent in the trailing days, recurring on ${formatNumber(sharePct, 0)}% of days. `
+          ? `The bracket marks the recurring window: the hours that recur as a group most often, opening on ${formatNumber(sharePct, 0)}% of days. ${other ? `${otherWindowSentence(other, days)} ` : ""}`
           : ""}
         Snapshot-fresh as of {snapshot.retrievedAt.slice(0, 10)}. All times Europe/Amsterdam.
       </p>

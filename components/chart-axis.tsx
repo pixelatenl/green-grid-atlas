@@ -69,6 +69,10 @@ export const axisY =
  * border token, muted tick labels, the unit stated once at the top of
  * the axis, and a thin vertical axis line. `skipZero` leaves out the
  * zero gridline on charts that already draw their own zero line.
+ * `skipTop` leaves out the gridline of the topmost tick
+ * (axis.ticks[axis.ticks.length - 1], the chart's top border) while
+ * its tick label still renders; default false keeps every existing
+ * consumer's output byte-identical.
  */
 export function YAxis({
   axis,
@@ -78,6 +82,7 @@ export function YAxis({
   plotBottom,
   unit,
   skipZero = false,
+  skipTop = false,
 }: {
   axis: AxisSpec;
   plotLeft: number;
@@ -86,14 +91,16 @@ export function YAxis({
   plotBottom: number;
   unit: string;
   skipZero?: boolean;
+  skipTop?: boolean;
 }) {
   const y = axisY(axis, plotTop, plotBottom);
+  const topTick = axis.ticks[axis.ticks.length - 1];
   return (
     <g>
       <line x1={plotLeft} x2={plotLeft} y1={plotTop} y2={plotBottom} stroke="var(--border)" strokeWidth={1} />
       {axis.ticks.map((t) => (
         <g key={t}>
-          {!(skipZero && t === 0) && (
+          {!(skipZero && t === 0) && !(skipTop && t === topTick) && (
             <line x1={plotLeft} x2={plotRight} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeWidth={1} />
           )}
           <text x={plotLeft - 4} y={y(t) + 3} textAnchor="end" fontSize="9" className="fill-muted-foreground">
