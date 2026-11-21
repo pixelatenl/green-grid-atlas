@@ -5,13 +5,20 @@ import { EMISSION_FACTORS, PRODUCTION_TYPES } from "@/grid/emission-factors";
 
 /*
   Coda, "The extremes", in the family coda style: one composition. A
-  rounded, full-width photo stage inside the page container (the fleet
-  and justice coda pattern, not a full-bleed banner), with all editorial
-  content bottom-anchored over a dark scrim: kicker chip, display h2
-  headline carrying one brand-accent span, deck copy, the dirtiest and
-  cleanest hour as two big-number figures with their mix bars, and the
-  five-record stat row. Below the stage, on the normal background, the
-  AI insight block.
+  slim rounded, full-width photo stage inside the page container (the
+  fleet and justice coda pattern, not a full-bleed banner), with the
+  editorial content bottom-anchored over a dark scrim: kicker chip,
+  display h2 headline carrying one brand-accent span, deck copy, and
+  the dirtiest and cleanest hour as two big-number figures with their
+  mix bars. Below the stage, on the normal background, the five-record
+  set as equal-height cards, then the AI insight block.
+
+  Record times render friendly at render time: the stored localLabel
+  machine forms ("YYYY-MM-DD HH:MM +hh:mm" for hour records,
+  "YYYY-MM-DD (daily mean)" for the day record) map to "D Mon YYYY,
+  HH:MM CET/CEST" and "D Mon YYYY, daily mean" via friendlyRecordTime
+  below, the zone name derived from the stored UTC offset; a label
+  matching neither pattern falls through unchanged.
 
   The photo is "white electic windmill" by Nicholas Doherty on Unsplash
   (Rampion Offshore Wind Farm, United Kingdom, Unsplash License),
@@ -28,6 +35,42 @@ const RECORD_NOTES: Record<string, string> = {
   biggestImport: "The interconnectors did overtime.",
   dunkelflauteDay: "The day wind and sun both slept in.",
 };
+
+/* Short month names, en-GB, the short form of the family long-month
+   convention in src/format-date.ts; a documented mapping table used
+   only by the record time labels, not statistics. */
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/* Amsterdam zone name per stored UTC offset (Europe/Amsterdam only
+   ever carries +01:00 or +02:00, so the stored offset determines the
+   zone name deterministically). An unexpected offset keeps the
+   stored raw label, never a guessed name. */
+const ZONE_BY_OFFSET: Record<string, string> = { "+01:00": "CET", "+02:00": "CEST" };
+
+/*
+  Friendly Amsterdam time for a record's stored localLabel. The
+  snapshot stores the machine forms composed by dateHourLabel in
+  src/grid/amsterdam-time.ts, already Amsterdam local time with the
+  explicit offset: "YYYY-MM-DD HH:MM +hh:mm" for hour records and
+  "YYYY-MM-DD (daily mean)" for the day record. This maps them to
+  "D Mon YYYY, HH:MM CET/CEST" (zone from the stored offset) and
+  "D Mon YYYY, daily mean", all rendered prose so the dash discipline
+  applies (commas, no dashes). Anything that matches neither pattern
+  renders unchanged.
+*/
+function friendlyRecordTime(localLabel: string): string {
+  const hour = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}) ([+-]\d{2}:\d{2})$/.exec(localLabel);
+  if (hour) {
+    const [, y, mo, d, hh, mm, off] = hour;
+    return `${Number(d)} ${SHORT_MONTHS[Number(mo) - 1]} ${y}, ${hh}:${mm} ${ZONE_BY_OFFSET[off] ?? off}`;
+  }
+  const day = /^(\d{4})-(\d{2})-(\d{2}) \(daily mean\)$/.exec(localLabel);
+  if (day) {
+    const [, y, mo, d] = day;
+    return `${Number(d)} ${SHORT_MONTHS[Number(mo) - 1]} ${y}, daily mean`;
+  }
+  return localLabel;
+}
 
 function MixBar({ mix }: { mix: Record<string, number | null> | undefined }) {
   if (!mix) return null;
@@ -100,7 +143,7 @@ export function Coda() {
                 <span className="ml-1 text-sm font-semibold text-white/70">g CO2-eq/kWh</span>
               </p>
               <p className="mt-1 text-xs text-white/70">
-                {dirtiest?.localLabel}: computed intensity, generation-mix basis (imports not attributed)
+                {dirtiest ? `${friendlyRecordTime(dirtiest.localLabel)}. Computed intensity, generation-mix basis (imports not attributed)` : ""}
               </p>
               <MixBar mix={dirtiest?.mix} />
             </div>
@@ -111,25 +154,10 @@ export function Coda() {
                 <span className="ml-1 text-sm font-semibold text-white/70">g CO2-eq/kWh</span>
               </p>
               <p className="mt-1 text-xs text-white/70">
-                {cleanest?.localLabel}: computed intensity, generation-mix basis (imports not attributed)
+                {cleanest ? `${friendlyRecordTime(cleanest.localLabel)}. Computed intensity, generation-mix basis (imports not attributed)` : ""}
               </p>
               <MixBar mix={cleanest?.mix} />
             </div>
-          </div>
-
-          {/* the five-record stat row on the photo */}
-          <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-white/15 pt-4 sm:grid-cols-3 lg:grid-cols-5">
-            {stats.map((r) => (
-              <div key={r.key}>
-                <p className="gg-label text-white/70">{r.label}</p>
-                <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight text-white sm:text-3xl">
-                  {formatNumber(r.value, r.unit.includes("EUR") ? 2 : 0)}
-                  <span className="ml-1 text-xs font-semibold text-white/70">{r.unit}</span>
-                </p>
-                <p className="mt-1 gg-caption">{r.localLabel}</p>
-                <p className="gg-caption italic">{RECORD_NOTES[r.key] ?? ""}</p>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -146,6 +174,24 @@ export function Coda() {
             Unsplash
           </a>
         </p>
+      </div>
+
+      {/* the record set as equal-height cards on the normal background,
+          the family card idiom (border-border bg-background), before the
+          AI insight block; grid cells stretch, the note anchors to the
+          bottom so all cards align */}
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {stats.map((r) => (
+          <div key={r.key} className="flex h-full flex-col rounded-xl border border-border bg-background p-4">
+            <p className="gg-label text-muted-foreground">{r.label}</p>
+            <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight sm:text-3xl">
+              {formatNumber(r.value, r.unit.includes("EUR") ? 2 : 0)}
+              <span className="ml-1 text-xs font-semibold text-muted-foreground">{r.unit}</span>
+            </p>
+            <p className="mt-1 gg-caption text-muted-foreground">{friendlyRecordTime(r.localLabel)}</p>
+            <p className="mt-auto pt-2 gg-caption italic text-muted-foreground">{RECORD_NOTES[r.key] ?? ""}</p>
+          </div>
+        ))}
       </div>
 
       {/* below the photo, on the normal background: the AI insight block */}
