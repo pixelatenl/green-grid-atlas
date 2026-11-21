@@ -5,14 +5,16 @@ import { EMISSION_FACTORS, PRODUCTION_TYPES } from "@/grid/emission-factors";
 
 /*
   Coda, "The extremes", in the family coda style: one composition. A
-  rounded, full-width photo stage inside the page container (the fleet
-  and justice coda pattern, not a full-bleed banner), with all editorial
-  content bottom-anchored over a dark scrim: kicker chip, display h2
-  headline carrying one brand-accent span, deck copy, the dirtiest and
-  cleanest hour as two big-number figures with their mix bars, and the
-  five-record stat row, each cell bottom aligned (label and value at
-  the top, the italic note anchored to the cell bottom). Below the
-  stage, on the normal background, the AI insight block.
+  compact rounded, full-width photo stage inside the page container (the
+  fleet and justice coda pattern, not a full-bleed banner): the content
+  defines the stage height (440px minimum, no viewport-based floor) and
+  all editorial content sits bottom-anchored over a dark scrim: kicker
+  chip, display h2 headline carrying one brand-accent span, deck copy,
+  the dirtiest and cleanest hour as two big-number figures with their
+  mix bars, and the five-record stat row, each cell bottom aligned
+  (label and value at the top, the italic note anchored to the cell
+  bottom). Below the stage, on the normal background, the AI insight
+  block.
 
   Record times render friendly at render time: the stored localLabel
   machine forms ("YYYY-MM-DD HH:MM +hh:mm" for hour records,
@@ -103,11 +105,12 @@ export function Coda() {
 
   return (
     <section className="mb-12">
-      {/* photo stage: rounded, full container width, at least 68vh tall
-          (440px minimum), growing if the stacked content needs more room */}
+      {/* photo stage: rounded, full container width; the content defines
+          the height (440px minimum for slim states), no viewport-based
+          floor; the photo fills the stage via object-cover */}
       <div
         className="coda-stage relative flex flex-col justify-end overflow-hidden rounded-xl"
-        style={{ minHeight: "max(68vh, 440px)" }}
+        style={{ minHeight: "440px" }}
       >
         <img
           src="/images/rampion-offshore-wind.jpg"
@@ -125,18 +128,17 @@ export function Coda() {
           <p className="w-fit rounded-full border border-white/25 bg-black/40 px-2.5 py-1 gg-label text-white">
             The extremes
           </p>
-          <h2 className="mt-3 max-w-[22ch] gg-statement">
+          <h2 className="mt-3 gg-statement">
             From <span className="tabular-nums text-brand-accent">{dirtiest ? formatNumber(dirtiest.value, 0) : "n/a"}</span>{" "}
             to <span className="tabular-nums">{cleanest ? formatNumber(cleanest.value, 0) : "n/a"}</span> g CO2-eq/kWh
           </h2>
           <p className="mt-3 max-w-[62ch] text-sm leading-relaxed text-white">
-            The dirtiest and cleanest hours ever recorded on the Dutch grid, then the full record set. Computed
-            intensity, generation-mix basis (imports not attributed).
+            The dirtiest and cleanest hours ever recorded on the Dutch grid, then the full record set.
           </p>
 
           {/* the pair: dirtiest vs cleanest hour, big numbers over muted
               labels, band tones kept, mix bars retained */}
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 sm:gap-6">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 sm:gap-6">
             <div>
               <p className="gg-label text-gg-red-band">Dirtiest hour on record</p>
               <p className="mt-1 text-4xl font-black tabular-nums tracking-tight text-white sm:text-4xl">
@@ -167,7 +169,7 @@ export function Coda() {
               anchors to the cell bottom (mt-auto), so all five columns
               align through the row despite different note and unit
               lengths; the thin divider keeps the two tiers apart */}
-          <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-white/15 pt-4 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-white/15 pt-4 sm:grid-cols-3 lg:grid-cols-5">
             {stats.map((r) => (
               <div key={r.key} className="flex h-full flex-col">
                 <p className="gg-label text-white/70">{r.label}</p>
