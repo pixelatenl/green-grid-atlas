@@ -1,0 +1,7 @@
+# Clean URLs: serve an extensionless path as its .html file when that
+# file exists in the export (the /widget route). Assets with real
+# extensions, the /data snapshot, and the root DirectoryIndex are
+# untouched because no matching .html sibling exists for them.
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.*)$ $1.html [L]
