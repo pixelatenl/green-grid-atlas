@@ -84,6 +84,13 @@ const SCALE_MARKS = [0, 25, 50, 75, 100] as const;
    leaves the strip on narrow screens (half its approx width is 92px). */
 const LABEL_CLAMP = 92;
 
+/* Window chip text at title level, mirroring the chapters chip: states
+   the card's time basis beside the heading; the day count interpolates
+   WINDOW_PARAMS, never hardcoded. aria-hidden: the section description
+   already announces the trailing window, so the chip never
+   double-announces. */
+const chipText = `Last ${WINDOW_PARAMS.TRAILING_DAYS} days`;
+
 /* The editorial mappings (daypart table, month-to-season table, band
    words, the 50 percent seasonal tier) live in the shared module
    src/grid/editorial.ts, imported above, so the red-hours mirror card
@@ -187,6 +194,13 @@ export function GreenWindowCard() {
       title={
         <>
           The <span className="text-brand-accent">green window</span> {seasonPhrase}
+          {/* the window chip, same pattern as the chapters titles */}
+          <span
+            aria-hidden="true"
+            className="gg-label ml-3 inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 align-middle text-muted-foreground"
+          >
+            {chipText}
+          </span>
         </>
       }
       description={`The recurring hours when Dutch power is both cheap and clean, computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days.`}

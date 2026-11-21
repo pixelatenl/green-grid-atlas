@@ -41,6 +41,14 @@ const NEIGHBOR_LABELS: Record<string, string> = {
   sum: "All neighbors (net)",
 };
 
+/* The trailing window definition used by the chip: the snapshot's
+   trailing series spans the trailing twelve months (its full-day
+   array; the caption's "twelve months to" sentence and the tooltip's
+   "12 months to" label state the same window). The chip counts months
+   of window, never an annualized energy claim. */
+const TRAILING_MONTHS = 12;
+const chipText = `Last ${TRAILING_MONTHS} months`;
+
 /* Sanctioned chart geometry: canvas, paddings and gutters. Axis domains
    and ticks are computed per series, never constants. */
 const W = 720;
@@ -344,7 +352,18 @@ export function Flows() {
 
   return (
     <FamilySection
-      title="Where power flows"
+      title={
+        <>
+          Where power flows
+          {/* the window chip, same pattern as the chapters titles */}
+          <span
+            aria-hidden="true"
+            className="gg-label ml-3 inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 align-middle text-muted-foreground"
+          >
+            {chipText}
+          </span>
+        </>
+      }
       description="Cross-border physical flows (cbpf) between the Netherlands and its neighbors. Imports count up in teal, exports down in orange; the source's sign convention (imports positive, exports negative) is disclosed here."
     >
       <h3 className="text-lg font-bold tracking-tight">Import and export per neighbor</h3>
