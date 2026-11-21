@@ -84,6 +84,14 @@ const SCALE_MARKS = [0, 25, 50, 75, 100] as const;
    leaves the strip on narrow screens (half its approx width is 92px). */
 const LABEL_CLAMP = 92;
 
+/* Strip tick row geometry, shared by the green and red cards
+   byte-identically: the interior boundary ticks anchor to the strip's
+   24-cell hour grid, the same geometry the bars, the brackets and the
+   tooltip axis (data-x0, data-x1, data-units 24) use, so hour h sits
+   at exactly (h / 24) * 100 percent of the plot width. Pure geometry,
+   never statistics. */
+const TICK_BOUNDARY_HOURS = [6, 12, 18] as const;
+
 /* Window chip text at title level, mirroring the chapters chip: states
    the card's time basis beside the heading; the day count interpolates
    WINDOW_PARAMS, never hardcoded. aria-hidden: the criteria chip support
@@ -379,13 +387,25 @@ export function GreenWindowCard() {
                 </div>
               )}
 
-              {/* hour ticks below the strip, as before */}
-              <div className="mt-1 flex justify-between gg-label text-muted-foreground">
+              {/* hour ticks below the strip: true day boundaries anchored
+                  to the strip's 24-cell hour grid. 00:00 stays in normal
+                  flow, anchoring the row's left edge at the hour 0
+                  boundary and keeping the row's natural line height; the
+                  quarter boundaries center on their exact positions; the
+                  24:00 end-of-day tick pins flush right, marking the end
+                  of the local day (Europe/Amsterdam). */}
+              <div className="relative mt-1 gg-label text-muted-foreground">
                 <span>00:00</span>
-                <span>06:00</span>
-                <span>12:00</span>
-                <span>18:00</span>
-                <span>23:00</span>
+                {TICK_BOUNDARY_HOURS.map((h) => (
+                  <span
+                    key={h}
+                    className="absolute top-0"
+                    style={{ left: `${(h / 24) * 100}%`, transform: "translateX(-50%)" }}
+                  >
+                    {`${String(h).padStart(2, "0")}:00`}
+                  </span>
+                ))}
+                <span className="absolute top-0 right-0">24:00</span>
               </div>
             </div>
           </div>
