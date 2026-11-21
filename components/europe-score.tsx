@@ -12,6 +12,16 @@ const COUNTRY_LABELS: Record<string, string> = {
   ua: "Ukraine", uk: "United Kingdom", xk: "Kosovo",
 };
 
+/* Window chip text at title level, mirroring the chapters chip: states
+   the section's time basis beside the heading. The day count is the
+   score window definition owned by src/grid/scores.ts (the daily
+   renewable-share averages cover the trailing 365 days, the same
+   window snapshot.scores.basis states); it is a documented definition
+   constant, not a statistic. aria-hidden: the lede and the caption fine
+   print already carry the method, so the chip never double-announces. */
+const SCORE_WINDOW_DAYS = 365;
+const chipText = `Last ${SCORE_WINDOW_DAYS} days`;
+
 /*
   European cleanliness score: ranked bar visual from the per-country score
   summaries in the snapshot. Score composition and basis are named on the
@@ -22,13 +32,24 @@ export function EuropeScore() {
   const max = countries.reduce((m, c) => Math.max(m, c.score ?? 0), 1);
   return (
     <FamilySection
-      title="European cleanliness score"
+      headingClassName="gg-heading-wide"
+      title={
+        <>
+          European cleanliness score
+          {/* the window chip, same pattern as the other section titles */}
+          <span
+            aria-hidden="true"
+            className="gg-label ml-3 inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 align-middle text-muted-foreground"
+          >
+            {chipText}
+          </span>
+        </>
+      }
       description={
         <>
-          Ranked zones from energy-charts.{" "}
-          <strong>Score composition:</strong> {snapshot.scores.composition}.{" "}
-          <strong>Basis:</strong> {snapshot.scores.basis}. Snapshot-fresh as of{" "}
-          {formatDate(snapshot.scores.retrievedAt)}.
+          Every European zone, ranked by how much of the electricity it consumes is served by renewables.{" "}
+          A score of 100 means fully renewable, 0 means none of it; the Netherlands is highlighted.{" "}
+          Snapshot-fresh as of {formatDate(snapshot.scores.retrievedAt)}.
         </>
       }
     >
@@ -59,7 +80,8 @@ export function EuropeScore() {
         })}
       </ol>
       <p className="mt-3 gg-caption">
-        Score 0–100 per the composition above; “ren.” is the trailing-365-day mean daily renewable share of
+        <strong>Score composition:</strong> {snapshot.scores.composition}.{" "}
+        <strong>Basis:</strong> {snapshot.scores.basis}. The ren. column is the mean daily renewable share of
         load. The Netherlands refreshes daily; the other zones refresh weekly.
       </p>
     </FamilySection>
