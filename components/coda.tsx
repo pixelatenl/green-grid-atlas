@@ -5,13 +5,14 @@ import { EMISSION_FACTORS, PRODUCTION_TYPES } from "@/grid/emission-factors";
 
 /*
   Coda, "The extremes", in the family coda style: one composition. A
-  slim rounded, full-width photo stage inside the page container (the
-  fleet and justice coda pattern, not a full-bleed banner), with the
-  editorial content bottom-anchored over a dark scrim: kicker chip,
-  display h2 headline carrying one brand-accent span, deck copy, and
-  the dirtiest and cleanest hour as two big-number figures with their
-  mix bars. Below the stage, on the normal background, the five-record
-  set as equal-height cards, then the AI insight block.
+  rounded, full-width photo stage inside the page container (the fleet
+  and justice coda pattern, not a full-bleed banner), with all editorial
+  content bottom-anchored over a dark scrim: kicker chip, display h2
+  headline carrying one brand-accent span, deck copy, the dirtiest and
+  cleanest hour as two big-number figures with their mix bars, and the
+  five-record stat row, each cell bottom aligned (label and value at
+  the top, the italic note anchored to the cell bottom). Below the
+  stage, on the normal background, the AI insight block.
 
   Record times render friendly at render time: the stored localLabel
   machine forms ("YYYY-MM-DD HH:MM +hh:mm" for hour records,
@@ -159,6 +160,26 @@ export function Coda() {
               <MixBar mix={cleanest?.mix} />
             </div>
           </div>
+
+          {/* the five-record stat row back on the photo, bottom aligned:
+              the label and value anchor the top of each stretched cell,
+              the friendly time sits under the value, and the italic note
+              anchors to the cell bottom (mt-auto), so all five columns
+              align through the row despite different note and unit
+              lengths; the thin divider keeps the two tiers apart */}
+          <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-white/15 pt-4 sm:grid-cols-3 lg:grid-cols-5">
+            {stats.map((r) => (
+              <div key={r.key} className="flex h-full flex-col">
+                <p className="gg-label text-white/70">{r.label}</p>
+                <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight text-white sm:text-3xl">
+                  {formatNumber(r.value, r.unit.includes("EUR") ? 2 : 0)}
+                  <span className="ml-1 text-xs font-semibold text-white/70">{r.unit}</span>
+                </p>
+                <p className="mt-1 gg-caption">{friendlyRecordTime(r.localLabel)}</p>
+                <p className="mt-auto pt-2 gg-caption italic">{RECORD_NOTES[r.key] ?? ""}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         <p className="coda-credit gg-caption absolute bottom-2 right-3">
@@ -174,24 +195,6 @@ export function Coda() {
             Unsplash
           </a>
         </p>
-      </div>
-
-      {/* the record set as equal-height cards on the normal background,
-          the family card idiom (border-border bg-background), before the
-          AI insight block; grid cells stretch, the note anchors to the
-          bottom so all cards align */}
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {stats.map((r) => (
-          <div key={r.key} className="flex h-full flex-col rounded-xl border border-border bg-background p-4">
-            <p className="gg-label text-muted-foreground">{r.label}</p>
-            <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight sm:text-3xl">
-              {formatNumber(r.value, r.unit.includes("EUR") ? 2 : 0)}
-              <span className="ml-1 text-xs font-semibold text-muted-foreground">{r.unit}</span>
-            </p>
-            <p className="mt-1 gg-caption text-muted-foreground">{friendlyRecordTime(r.localLabel)}</p>
-            <p className="mt-auto pt-2 gg-caption italic text-muted-foreground">{RECORD_NOTES[r.key] ?? ""}</p>
-          </div>
-        ))}
       </div>
 
       {/* below the photo, on the normal background: the AI insight block */}
