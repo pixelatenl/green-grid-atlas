@@ -40,20 +40,10 @@ const plotW = plotRight - plotLeft;
 const plotH = plotBottom - plotTop;
 const bw = plotW / 24;
 
-/* Window chip text and pill geometry. The chip states the chart's time
-   basis on the figure itself; the day count is interpolated from
-   WINDOW_PARAMS, never hardcoded. SVG text does not auto-measure, so
-   the pill width is derived from the text length with the sanctioned
-   geometry constants: padding 12 plus 5 per character at fontSize 9,
-   height 14, rx 7, y 3, baseline 13, stroke width 1. */
+/* Window chip text, shown beside each chapter section title: the chip
+   states the chart's time basis at title level; the day count is
+   interpolated from WINDOW_PARAMS, never hardcoded. */
 const chipText = `Avg day, last ${WINDOW_PARAMS.TRAILING_DAYS} days`;
-const CHIP_PAD = 12;
-const CHIP_CHAR_W = 5;
-const CHIP_H = 14;
-const CHIP_RX = 7;
-const CHIP_Y = 3;
-const CHIP_BASELINE = 13;
-const chipW = CHIP_PAD + CHIP_CHAR_W * chipText.length;
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
@@ -82,9 +72,7 @@ const at = (key: string, hour: number) => profiles[key]?.[hour] ?? null;
 
 /** Pure-SVG 24-hour profile: bars for `series` on a computed y-axis,
     line overlay for `overlay` on its own normalized scale (exactly as
-    before), hit strips per hour for cursor snapping and touch. A window
-    chip pill in the top-right corner states the time basis on the chart
-    itself, with the trailing day count taken from WINDOW_PARAMS. */
+    before), hit strips per hour for cursor snapping and touch. */
 function DayProfile({
   series,
   seriesLabel,
@@ -244,36 +232,6 @@ function DayProfile({
               {hh(h)}
             </text>
           ))}
-          {/* Window chip, top-right of the plot: the pill and its text
-              state the time basis visibly on the chart. The pill's right
-              edge aligns with the plot's right edge; the top strip holds
-              no gridline (YAxis skipTop), and the card fill keeps the
-              pill opaque if the overlay halo ever reaches the top
-              strip. The group is aria-hidden and pointer-events none: the
-              svg summary and the tooltip qualifier already state the
-              window, so the chip never double-announces and cannot
-              affect hover or layout. */}
-          <g aria-hidden="true" pointerEvents="none">
-            <rect
-              x={plotRight - chipW}
-              y={CHIP_Y}
-              width={chipW}
-              height={CHIP_H}
-              rx={CHIP_RX}
-              fill="var(--card)"
-              stroke="var(--border)"
-              strokeWidth={1}
-            />
-            <text
-              x={plotRight - chipW / 2}
-              y={CHIP_BASELINE}
-              textAnchor="middle"
-              fontSize="9"
-              className="fill-muted-foreground"
-            >
-              {chipText}
-            </text>
-          </g>
         </svg>
       </ChartTooltip>
       {/* Static legend row under the chart, replacing the peak-dot
@@ -331,7 +289,28 @@ function Chapter({
        override: the heading spans the full card content width like
        the green window and red hours titles, instead of wrapping at
        the .gg-heading 18ch scale cap. */
-    <FamilySection title={title} description={description} headingClassName="gg-heading-wide">
+    <FamilySection
+      title={
+        <>
+          {title}
+          {/* Window chip at title level, on the same line as the section
+              title ("The gas day" and its three siblings): a pill in the
+              family chip pattern (gg-label, border token, card surface)
+              that states the chart's time basis visibly. The day count is
+              interpolated from WINDOW_PARAMS, never hardcoded. aria-hidden:
+              the svg summary and the tooltip qualifier already state the
+              window, so the chip never double-announces. */}
+          <span
+            aria-hidden="true"
+            className="gg-label ml-3 inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 align-middle text-muted-foreground"
+          >
+            {chipText}
+          </span>
+        </>
+      }
+      description={description}
+      headingClassName="gg-heading-wide"
+    >
       {/* Divider between the section description (card header) and the
          derived headline (card body): a 1px rule in the border token,
          spanning the content width. Static geometry only; the card's
