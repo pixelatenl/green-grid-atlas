@@ -86,9 +86,9 @@ const LABEL_CLAMP = 92;
 
 /* Window chip text at title level, mirroring the chapters chip: states
    the card's time basis beside the heading; the day count interpolates
-   WINDOW_PARAMS, never hardcoded. aria-hidden: the section description
-   already announces the trailing window, so the chip never
-   double-announces. */
+   WINDOW_PARAMS, never hardcoded. aria-hidden: the criteria chip support
+   lines and the strip caption already announce the trailing window, so
+   the chip never double-announces. */
 const chipText = `Last ${WINDOW_PARAMS.TRAILING_DAYS} days`;
 
 /* The editorial mappings (daypart table, month-to-season table, band
@@ -203,7 +203,7 @@ export function GreenWindowCard() {
           </span>
         </>
       }
-      description={`The recurring hours when Dutch power is both cheap and clean, computed from the trailing ${WINDOW_PARAMS.TRAILING_DAYS} days.`}
+      description="The recurring hours when Dutch power is both cheap and clean."
     >
       <p className="gg-statement">
         {band ? (
