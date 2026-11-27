@@ -7,8 +7,8 @@ import { Flows } from "@/components/flows";
 import { RiskIndicators } from "@/components/risk-indicators";
 import { EuropeScore } from "@/components/europe-score";
 import { Coda } from "@/components/coda";
+import { EmbedWidget } from "@/components/embed-widget";
 import { FamilySection } from "@/components/family-section";
-import { FAMILY } from "@/family";
 import { snapshot, formatNumber } from "@/data/snapshot";
 import { formatDate } from "@/format-date";
 import { formatBand } from "@/grid/green-window";
@@ -83,15 +83,13 @@ export default function Home() {
         title="Embed the green window"
         description="A minimal widget page renders the NL green window and tomorrow's price shape from the same snapshot JSON."
       >
-        <p className="max-w-[62ch] text-sm text-muted-foreground">
+        <p className="mb-6 max-w-[62ch] text-sm text-muted-foreground">
           The widget lives at <code className="rounded bg-muted px-1">/widget</code> (noindex; its canonical URL is
           this page) and reads the same-origin snapshot at{" "}
-          <code className="rounded bg-muted px-1">/data/snapshot.json</code>. Embed it with an iframe, e.g.{" "}
-          <code className="rounded bg-muted px-1">
-            &lt;iframe src="{FAMILY.siteUrl}/widget" width="420" height="260"&gt;&lt;/iframe&gt;
-          </code>
-          . Copy on the widget says snapshot-fresh daily; it is never live.
+          <code className="rounded bg-muted px-1">/data/snapshot.json</code>. Copy on the widget says
+          snapshot-fresh daily; it is never live.
         </p>
+        <EmbedWidget />
       </FamilySection>
     </div>
   );
