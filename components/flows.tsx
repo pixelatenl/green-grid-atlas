@@ -355,7 +355,10 @@ export function Flows() {
       title={
         <>
           Where power flows
-          {/* the window chip, same pattern as the chapters titles */}
+          {/* the window chip, same pattern as the chapters titles; the
+              gg-heading-wide override lifts the .gg-heading 18ch cap so
+              the chip stays on the title line instead of wrapping below
+              it (the card content is wide enough for both) */}
           <span
             aria-hidden="true"
             className="gg-label ml-3 inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 align-middle text-muted-foreground"
@@ -365,6 +368,7 @@ export function Flows() {
         </>
       }
       description="Cross-border physical flows (cbpf) between the Netherlands and its neighbors. Imports count up in teal, exports down in orange; the source's sign convention (imports positive, exports negative) is disclosed here."
+      headingClassName="gg-heading-wide"
     >
       <h3 className="text-lg font-bold tracking-tight">Import and export per neighbor</h3>
       <ChartTooltip labels={tipLabels} series={volumeSeries}>
@@ -372,6 +376,20 @@ export function Flows() {
           <FlowPanel />
         </div>
       </ChartTooltip>
+      {/* Static legend row under the chart, same pattern as the chapters
+          legend: swatches in the flow color tokens (the theme mapping pairs
+          bg-gg-flow-* with the bars' fill-gg-flow-*, so one token drives
+          both), standard label size, no hover behavior or state. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 gg-label text-muted-foreground">
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden="true" className="inline-block h-2 w-3 rounded-[2px] bg-gg-flow-import" />
+          Import
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden="true" className="inline-block h-2 w-3 rounded-[2px] bg-gg-flow-export" />
+          Export
+        </span>
+      </div>
       <p className="mt-4 gg-caption">
         {parts.map((part, i) => (
           <Fragment key={i}>
