@@ -1,0 +1,7 @@
+# Serve extensionless routes from their .html sibling (e.g. /widget -> /widget.html)
+# and tolerate a trailing slash (/widget/), which would otherwise resolve into the
+# RSC payload directory and 404.
+RewriteEngine On
+RewriteRule ^widget/$ widget [L]
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.*)$ $1.html [L]
